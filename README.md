@@ -66,3 +66,7 @@ release.sh              publishes a GitHub release for the updater
 
 - Theme changes use `defaults write -g` for `AppleAccentColor`, `AppleHighlightColor` and the macOS 26 `AppleIconAppearance*` keys. Changing the icon tint restarts the Dock.
 - The starter pack is downloaded from its sources at runtime, not bundled: stills from wallhaven.cc and videos from mixkit.co under the Mixkit License. Respect creators' licenses when you share wallpapers.
+
+## License
+
+Aura's code is released under the [MIT License](LICENSE). The bundled Geist and Geist Mono fonts are licensed separately under the [SIL Open Font License 1.1](Resources/Fonts/OFL.txt). Starter-pack wallpapers are not part of this repository and keep their creators' licenses.
