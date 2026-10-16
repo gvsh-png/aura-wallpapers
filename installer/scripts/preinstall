@@ -1,0 +1,4 @@
+#!/bin/sh
+# Quit a running copy so the new one can replace it.
+/usr/bin/pkill -x Aura || true
+exit 0

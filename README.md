@@ -22,14 +22,22 @@ A native macOS wallpaper app for static and animated wallpapers. It builds a the
 - **Design.** Frosted glass panels and buttons over a soft aurora drawn from your wallpaper's colors, the Geist typeface, and spring animations throughout. Cards tilt toward the pointer, and the grid and sections animate in. Reduce Motion is respected.
 - **Menu bar.** Pause or resume, turn animation on/off, set speed, shuffle, and open favorites. Closing the window keeps the wallpaper running.
 
+## Install
+
+1. Download **Aura-Installer.pkg** from the [latest release](https://github.com/gvsh-png/aura-wallpapers/releases/latest) and open it.
+2. If macOS says it can't check the installer: open **System Settings → Privacy & Security**, scroll down, click **Open Anyway**, then open the installer again. Aura isn't notarized by Apple yet, so this happens once.
+3. Follow the installer. Aura opens when it's done.
+
+Requires macOS 15 or later on Apple silicon or Intel.
+
 ## Updates
 
-Aura checks this repo's GitHub Releases every 6 hours (Customize → Updates, or right away with **Check Now**). When a newer `vX.Y.Z` release has an `Aura.zip` asset, Aura offers to update. It downloads the zip, checks the bundle ID and code signature, moves the old app to the Trash, puts the new one in its place and relaunches. `Aura --update` does the same from Terminal.
+Aura checks this repo's GitHub Releases every 6 hours (Customize → Updates, or right away with **Check Now**). When a newer `vX.Y.Z` release exists, Aura offers to update. It downloads the installer package and unpacks it without running it, so no admin password is needed. Then it checks the bundle ID and code signature, moves the old app to the Trash, puts the new one in its place and relaunches. `Aura --update` does the same from Terminal.
 
 To publish a release:
 
 ```sh
-./release.sh 1.2.0 "What changed"   # bumps VERSION, builds, zips, pushes, creates the GitHub release
+./release.sh 1.2.0 "What changed"   # bumps VERSION, builds universal, makes the .pkg, pushes, creates the GitHub release
 ```
 
 The repository must be public for other people's copies to see releases.
@@ -59,6 +67,8 @@ Sources/Aura/
   *View.swift           other SwiftUI screens
 Resources/Fonts/        Geist + Geist Mono (SIL Open Font License, see OFL.txt)
 scripts/make-icon.swift renders the app icon
+installer/              Installer package: distribution, welcome/conclusion pages, pre/postinstall scripts
+make-installer.sh       wraps build/Aura.app into build/Aura-Installer.pkg
 release.sh              publishes a GitHub release for the updater
 ```
 

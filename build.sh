@@ -1,14 +1,21 @@
 #!/bin/zsh
-# Builds Aura.app and installs it to /Applications. Usage: ./build.sh [--no-install]
+# Builds Aura.app and installs it to /Applications. Usage: [UNIVERSAL=1] ./build.sh [--no-install]
 set -euo pipefail
 cd "$(dirname "$0")"
 
 VERSION=$(cat VERSION)
-swift build -c release
 APP=build/Aura.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp .build/release/Aura "$APP/Contents/MacOS/Aura"
+if [[ "${UNIVERSAL:-}" == 1 ]]; then
+  # Apple silicon + Intel (cross-building avoids needing full Xcode)
+  swift build -c release --triple arm64-apple-macosx15.0
+  swift build -c release --triple x86_64-apple-macosx15.0
+  lipo -create .build/arm64-apple-macosx/release/Aura .build/x86_64-apple-macosx/release/Aura -output "$APP/Contents/MacOS/Aura"
+else
+  swift build -c release
+  cp .build/release/Aura "$APP/Contents/MacOS/Aura"
+fi
 cp -R Resources/Fonts "$APP/Contents/Resources/Fonts"
 
 # Icon

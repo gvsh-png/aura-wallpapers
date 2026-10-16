@@ -1,0 +1,7 @@
+#!/bin/sh
+# Open Aura for the person at the screen (the installer itself runs as root).
+uid=$(/usr/bin/stat -f %u /dev/console)
+if [ "$uid" -gt 0 ]; then
+  /bin/launchctl asuser "$uid" /usr/bin/open -a /Applications/Aura.app || true
+fi
+exit 0

@@ -2,8 +2,9 @@ import AppKit
 import SwiftUI
 import Observation
 
-/// Updates from GitHub Releases: finds a newer `vX.Y.Z` tag with an `Aura.zip` asset,
-/// swaps the app bundle in place (old copy goes to the Trash) and relaunches.
+/// Updates from GitHub Releases: finds a newer `vX.Y.Z` tag, takes Aura.app out of its installer
+/// package (or update zip on older releases), swaps the bundle in place (old copy goes to the Trash) and relaunches.
+/// No admin password needed: the package is unpacked, not run.
 @MainActor @Observable
 final class Updater {
     static let shared = Updater()
@@ -13,6 +14,7 @@ final class Updater {
         let version: String
         let notes: String
         let asset: URL
+        let assetName: String
         let page: URL
     }
 
@@ -63,11 +65,13 @@ final class Updater {
             UserDefaults.standard.set(Date.now.timeIntervalSince1970, forKey: "lastUpdateCheck")
             let version = gh.tag_name.hasPrefix("v") ? String(gh.tag_name.dropFirst()) : gh.tag_name
             guard Self.isNewer(version, than: currentVersion),
-                  let asset = gh.assets.first(where: { $0.name.lowercased().hasSuffix(".zip") }) else {
+                  let asset = gh.assets.first(where: { $0.name.lowercased().hasSuffix(".pkg") })
+                    ?? gh.assets.first(where: { $0.name.lowercased().hasSuffix(".zip") }) else {
                 state = .upToDate
                 return
             }
-            state = .available(Release(version: version, notes: gh.body ?? "", asset: asset.browser_download_url, page: gh.html_url))
+            state = .available(Release(version: version, notes: gh.body ?? "", asset: asset.browser_download_url,
+                                       assetName: asset.name, page: gh.html_url))
         } catch {
             state = .failed(error.localizedDescription)
         }
@@ -76,15 +80,20 @@ final class Updater {
     func install(_ release: Release) async {
         state = .downloading
         do {
-            let (zip, _) = try await URLSession.shared.download(from: release.asset)
+            let (download, _) = try await URLSession.shared.download(from: release.asset)
             state = .installing
             let fm = FileManager.default
             let work = fm.temporaryDirectory.appending(path: "AuraUpdate-\(UUID().uuidString)")
             try fm.createDirectory(at: work, withIntermediateDirectories: true)
-            guard Shell.run("/usr/bin/ditto", ["-x", "-k", zip.path, work.path]) == 0 else { throw DownloadError(message: "Couldn't unpack the update") }
+            let unpacked = work.appending(path: "unpacked")
+            let ok = release.assetName.lowercased().hasSuffix(".pkg")
+                ? Shell.run("/usr/sbin/pkgutil", ["--expand-full", download.path, unpacked.path]) == 0
+                : Shell.run("/usr/bin/ditto", ["-x", "-k", download.path, unpacked.path]) == 0
+            guard ok else { throw DownloadError(message: "Couldn't unpack the update") }
 
-            let fresh = work.appending(path: "Aura.app")
-            guard let bundle = Bundle(url: fresh), bundle.bundleIdentifier == Bundle.main.bundleIdentifier else {
+            let found = fm.enumerator(at: unpacked, includingPropertiesForKeys: nil)?
+                .first { ($0 as? URL)?.lastPathComponent == "Aura.app" } as? URL
+            guard let fresh = found, let bundle = Bundle(url: fresh), bundle.bundleIdentifier == Bundle.main.bundleIdentifier else {
                 throw DownloadError(message: "The download isn't Aura")
             }
             guard Shell.run("/usr/bin/codesign", ["--verify", "--deep", fresh.path]) == 0 else {
