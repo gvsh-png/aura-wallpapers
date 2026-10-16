@@ -3,11 +3,13 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+VERSION=$(cat VERSION)
 swift build -c release
 APP=build/Aura.app
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Aura "$APP/Contents/MacOS/Aura"
+cp -R Resources/Fonts "$APP/Contents/Resources/Fonts"
 
 # Icon
 ICONSET=build/AppIcon.iconset
@@ -29,8 +31,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleExecutable</key><string>Aura</string>
   <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.0</string>
-  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>CFBundleVersion</key><string>$VERSION</string>
+  <key>ATSApplicationFontsPath</key><string>Fonts</string>
   <key>LSMinimumSystemVersion</key><string>15.0</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
   <key>NSHighResolutionCapable</key><true/>

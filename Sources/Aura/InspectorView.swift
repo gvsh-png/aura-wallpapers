@@ -9,6 +9,8 @@ struct InspectorView: View {
         Group {
             if let w = selection.first, selection.count == 1 {
                 Detail(wallpaper: w)
+                    .id(w.id)
+                    .transition(.opacity.combined(with: .offset(x: 12)))
             } else if selection.count > 1 {
                 multi
             } else {
@@ -16,12 +18,13 @@ struct InspectorView: View {
                                        description: Text("Click a wallpaper to see details.\nDouble-click to set it."))
             }
         }
+        .animation(.auraSpring, value: selection.map(\.id))
     }
 
     private var multi: some View {
         VStack(spacing: 14) {
             Image(systemName: "square.stack.3d.up.fill").font(.system(size: 44)).foregroundStyle(.tint)
-            Text("\(selection.count) wallpapers").font(.title3.bold())
+            Text("\(selection.count) wallpapers").font(.aura(.title3, .bold))
             Text(selection.map(\.size).reduce(0, +).fileSize).foregroundStyle(.secondary)
             VStack(spacing: 8) {
                 ShareLink(items: selection.map(\.url)) { Label("Share", systemImage: "square.and.arrow.up").frame(maxWidth: .infinity) }
@@ -55,7 +58,7 @@ private struct Detail: View {
                     .shadow(color: .black.opacity(0.3), radius: 12, y: 6)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(wallpaper.title).font(.title2.bold()).lineLimit(2)
+                    Text(wallpaper.title).font(.aura(.title2, .bold)).lineLimit(2)
                     Text(wallpaper.collection).foregroundStyle(.secondary)
                 }
 
@@ -66,12 +69,12 @@ private struct Detail: View {
                           systemImage: engine.current?.id == wallpaper.id ? "checkmark.circle.fill" : "desktopcomputer")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminent)
                 .controlSize(.extraLarge)
 
                 HStack(spacing: 8) {
                     iconButton(library.isFavorite(wallpaper) ? "heart.fill" : "heart", "Favorite") { library.toggleFavorite(wallpaper) }
-                    ShareLink(item: wallpaper.url) { Image(systemName: "square.and.arrow.up").frame(maxWidth: .infinity) }
+                    ShareLink(item: wallpaper.url) { Image(systemName: "square.and.arrow.up").frame(maxWidth: .infinity) }.buttonStyle(.glass)
                         .help("Share")
                     iconButton("folder", "Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([wallpaper.url]) }
                     iconButton("pencil", "Rename") { renaming = true }
@@ -81,7 +84,7 @@ private struct Detail: View {
 
                 if let palette {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("Palette").font(.headline)
+                        Text("Palette").font(.aura(.headline))
                         HStack(spacing: 8) { ForEach(palette.colors, id: \.self) { Swatch(color: $0, size: 30) } }
                         Button {
                             ThemeManager.apply(palette)
@@ -100,7 +103,7 @@ private struct Detail: View {
                     info("Format", wallpaper.url.pathExtension.uppercased())
                     info("Added", wallpaper.added.formatted(date: .abbreviated, time: .shortened))
                 }
-                .font(.callout)
+                .font(.aura(.callout))
             }
             .padding(18)
         }
@@ -113,7 +116,13 @@ private struct Detail: View {
     }
 
     private func iconButton(_ symbol: String, _ help: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: symbol).frame(maxWidth: .infinity) }.help(help)
+        Button(action: action) {
+            Image(systemName: symbol)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.glass)
+        .help(help)
     }
 
     private func info(_ label: String, _ value: String) -> some View {

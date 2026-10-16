@@ -8,7 +8,7 @@ struct ThemeView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Theme").font(.system(size: 30, weight: .bold, design: .rounded))
+                    Text("Theme").font(.aura(size: 30, .bold))
                     Text("Colors from your wallpaper, applied to macOS: accent, text highlight, tinted app icons and Light/Dark mode.")
                         .foregroundStyle(.secondary)
                 }
@@ -52,16 +52,16 @@ struct ThemeView: View {
         let accent = Color(nsColor: p.accent)
         return Panel {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Preview").font(.title3.bold())
+                Text("Preview").font(.aura(.title3, .bold))
                 HStack(spacing: 18) {
                     Image(systemName: "folder.fill").font(.system(size: 44)).foregroundStyle(Color(nsColor: ThemeManager.iconTint(p.accent)))
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(Color(nsColor: ThemeManager.iconTint(p.accent)).gradient)
                         .frame(width: 50, height: 50)
-                        .overlay(Image(systemName: "sparkles").font(.title2).foregroundStyle(.white))
+                        .overlay(Image(systemName: "sparkles").font(.aura(.title2)).foregroundStyle(.white))
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Button("Button") {}.buttonStyle(.borderedProminent)
+                            Button("Button") {}.buttonStyle(.glassProminent)
                             Toggle("", isOn: .constant(true)).labelsHidden().toggleStyle(.switch)
                             Text("Selected text").padding(.horizontal, 4).background(Color(nsColor: ThemeManager.highlight(p.accent)).opacity(0.6))
                         }
@@ -70,7 +70,7 @@ struct ThemeView: View {
                     .tint(accent)
                 }
                 Text("macOS accent: \(ThemeManager.accentName(p.accent)) · Wallpaper is \(p.isDark ? "dark" : "light")")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .font(.aura(.callout)).foregroundStyle(.secondary)
             }
         }
     }
@@ -92,7 +92,7 @@ struct ThemeView: View {
             } label: {
                 Label(applied ? "Applied" : "Apply Theme", systemImage: applied ? "checkmark" : "paintbrush.pointed.fill").frame(minWidth: 150)
             }
-            .buttonStyle(.borderedProminent).controlSize(.extraLarge)
+            .buttonStyle(.glassProminent).controlSize(.extraLarge)
             Button("Copy as CSS") {
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.setString(p.css, forType: .string)

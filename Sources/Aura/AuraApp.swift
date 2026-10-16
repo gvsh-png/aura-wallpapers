@@ -14,6 +14,7 @@ struct AuraApp: App {
                 .environment(LibraryStore.shared)
                 .environment(WallpaperEngine.shared)
                 .environment(AgentStudio.shared)
+                .environment(Updater.shared)
                 .frame(minWidth: 1000, minHeight: 640)
         }
         .defaultSize(width: 1280, height: 800)
@@ -27,6 +28,7 @@ struct AuraApp: App {
             MenuBarMenu()
                 .environment(LibraryStore.shared)
                 .environment(WallpaperEngine.shared)
+                .environment(Updater.shared)
         } label: {
             MenuBarLabel()
         }
@@ -35,6 +37,8 @@ struct AuraApp: App {
             CustomizeView()
                 .environment(LibraryStore.shared)
                 .environment(WallpaperEngine.shared)
+                .environment(Updater.shared)
+                .font(.aura(.body))
                 .frame(width: 520, height: 640)
         }
     }
@@ -50,6 +54,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if !UserDefaults.standard.bool(forKey: "starterOffered") {
                 UserDefaults.standard.set(true, forKey: "starterOffered")
                 if library.items.isEmpty { library.installStarterPack() }
+            }
+            // `Aura --update` checks and installs right away (scripts, support).
+            if CommandLine.arguments.contains("--update") {
+                Task {
+                    await Updater.shared.check()
+                    if let release = Updater.shared.available { await Updater.shared.install(release) }
+                }
+            } else {
+                Updater.shared.checkIfDue()
             }
         }
         LoginItem.refresh()

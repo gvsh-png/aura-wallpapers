@@ -73,23 +73,53 @@ struct LoopingVideo: NSViewRepresentable {
     }
 }
 
-/// Soft, blurred copy of the active wallpaper behind the content.
+/// Blurred active wallpaper plus slow-drifting palette light, under a frosted layer the glass panels sit on.
 struct Backdrop: View {
     @Environment(WallpaperEngine.self) private var engine
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
             if let current = engine.current {
                 Thumbnail(wallpaper: current, size: 320)
-                    .blur(radius: 70)
-                    .saturation(1.4)
-                    .opacity(0.55)
+                    .blur(radius: 60)
+                    .saturation(1.5)
+                    .opacity(0.6)
                     .transition(.opacity)
             }
+            AuroraLights(colors: engine.palette.map { $0.colors.prefix(3).map { Color(nsColor: $0) } } ?? [.indigo, .purple, .blue],
+                         animated: !reduceMotion)
+                .opacity(0.4)
             Rectangle().fill(.ultraThinMaterial)
         }
         .ignoresSafeArea()
-        .animation(.easeInOut(duration: 0.6), value: engine.current?.id)
+        .animation(.easeInOut(duration: 0.8), value: engine.current?.id)
+    }
+}
+
+/// Large blurred colour blobs orbiting slowly; gives the glass something to catch.
+struct AuroraLights: View {
+    let colors: [Color]
+    let animated: Bool
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: !animated)) { context in
+            let t = context.date.timeIntervalSinceReferenceDate / 9
+            GeometryReader { geo in
+                ZStack {
+                    ForEach(Array(colors.enumerated()), id: \.offset) { i, color in
+                        let phase = t + Double(i) * 2.1
+                        Circle()
+                            .fill(color)
+                            .frame(width: geo.size.width * 0.55, height: geo.size.width * 0.55)
+                            .position(x: geo.size.width * (0.5 + 0.32 * cos(phase * (0.7 + 0.2 * Double(i)))),
+                                      y: geo.size.height * (0.5 + 0.3 * sin(phase * (0.9 - 0.15 * Double(i)))))
+                    }
+                }
+                .blur(radius: 90)
+            }
+        }
+        .animation(.easeInOut(duration: 1.2), value: colors)
     }
 }
 
@@ -102,26 +132,32 @@ struct Panel<Content: View>: View {
         content
             .padding(padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(.white.opacity(0.08)))
+            .glass()
     }
 }
 
 struct Badge: View {
     let text: String
     var symbol: String?
-    var tint: Color = .black.opacity(0.45)
+    var tint: Color = .black.opacity(0.3)
 
     var body: some View {
         HStack(spacing: 4) {
             if let symbol { Image(systemName: symbol) }
             Text(text)
         }
-        .font(.system(size: 10, weight: .bold, design: .rounded))
+        .font(.aura(size: 10, .bold))
         .textCase(.uppercase)
         .padding(.horizontal, 7).padding(.vertical, 4)
-        .background(tint, in: Capsule())
+        .background {
+            ZStack {
+                Capsule().fill(.ultraThinMaterial)
+                Capsule().fill(tint.opacity(0.75))
+            }
+        }
+        .overlay(Capsule().strokeBorder(.white.opacity(0.28), lineWidth: 0.5))
         .foregroundStyle(.white)
+        .environment(\.colorScheme, .dark)
     }
 }
 
@@ -141,7 +177,7 @@ struct Swatch: View {
                 .fill(Color(nsColor: color))
                 .frame(width: size, height: size)
                 .overlay(Circle().strokeBorder(.white.opacity(0.25), lineWidth: 1))
-                .overlay { if copied { Image(systemName: "checkmark").font(.caption.bold()).foregroundStyle(.white).shadow(radius: 2) } }
+                .overlay { if copied { Image(systemName: "checkmark").font(.aura(.caption, .bold)).foregroundStyle(.white).shadow(radius: 2) } }
                 .shadow(color: Color(nsColor: color).opacity(0.5), radius: 6, y: 2)
         }
         .buttonStyle(.plain)

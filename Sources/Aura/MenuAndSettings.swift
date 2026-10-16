@@ -3,6 +3,7 @@ import SwiftUI
 struct MenuBarMenu: View {
     @Environment(LibraryStore.self) private var library
     @Environment(WallpaperEngine.self) private var engine
+    @Environment(Updater.self) private var updater
     @AppStorage(Prefs.animate) private var animate = true
     @AppStorage(Prefs.speed) private var speed = 1.0
 
@@ -30,6 +31,9 @@ struct MenuBarMenu: View {
             }
         }
         Divider()
+        if let release = updater.available {
+            Button("Update to \(release.version)…") { Task { await updater.install(release) } }
+        }
         Button("Open Aura…") { WindowOpener.show() }
             .keyboardShortcut("o")
         SettingsLink { Text("Customize…") }

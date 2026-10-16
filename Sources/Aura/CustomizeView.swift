@@ -83,6 +83,8 @@ struct CustomizeView: View {
                 Text("With the menu bar icon hidden, open Aura from Applications to get back here.").foregroundStyle(.secondary)
             }
 
+            Section("Updates") { UpdateSettings() }
+
             Section("Library") {
                 LabeledContent("Folder", value: "~/Pictures/Wallpapers")
                 HStack {

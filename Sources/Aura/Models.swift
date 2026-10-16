@@ -67,6 +67,7 @@ enum Prefs {
     static let rotateSource = "rotateSource"
     // App
     static let showMenuBarIcon = "showMenuBarIcon"
+    static let autoUpdateCheck = "autoUpdateCheck"
 
     static func register() {
         UserDefaults.standard.register(defaults: [
@@ -75,7 +76,7 @@ enum Prefs {
             animate: true, speed: 1.0, scaling: Scaling.fill.rawValue, dim: 0.0, sound: false, volume: 0.5,
             pauseWhenCovered: true, pauseOnBattery: false, pauseInLowPower: true,
             rotateMinutes: 0, rotateSource: RotateSource.all.rawValue,
-            showMenuBarIcon: true,
+            showMenuBarIcon: true, autoUpdateCheck: true,
         ])
     }
 

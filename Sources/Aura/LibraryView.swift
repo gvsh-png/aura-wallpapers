@@ -22,13 +22,13 @@ struct LibraryView: View {
                         Text("Drop images, videos or a .zip pack here, use Get Wallpapers, or start with the starter pack.")
                     } actions: {
                         Button(library.installingStarter ? "Downloading…" : "Download Starter Pack") { library.installStarterPack() }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.glassProminent)
                             .disabled(library.installingStarter)
                     }
                     .frame(maxWidth: .infinity, minHeight: 360)
                 } else {
                     LazyVGrid(columns: columns, spacing: 18) {
-                        ForEach(items) { w in
+                        ForEach(Array(items.enumerated()), id: \.element.id) { index, w in
                             WallpaperCard(wallpaper: w,
                                           selected: selection.contains(w.id),
                                           active: engine.current?.id == w.id,
@@ -37,8 +37,11 @@ struct LibraryView: View {
                                 .onTapGesture(count: 2) { Task { await engine.apply(w) } }
                                 .simultaneousGesture(TapGesture().onEnded { select(w) })
                                 .contextMenu { menu(for: w) }
+                                .appear(index: index)
+                                .transition(.scale(scale: 0.9).combined(with: .opacity))
                         }
                     }
+                    .animation(.auraSpring, value: items.map(\.id))
                 }
             }
             .padding(24)
@@ -56,18 +59,20 @@ struct LibraryView: View {
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
-            Text(title).font(.system(size: 30, weight: .bold, design: .rounded))
-            Text("\(items.count)").font(.title3.weight(.medium)).foregroundStyle(.secondary)
+            Text(title).font(.aura(size: 30, .bold))
+            Text("\(items.count)").font(.aura(.title3, .medium)).foregroundStyle(.secondary)
+                .contentTransition(.numericText())
+                .animation(.auraSpring, value: items.count)
             Spacer()
         }
     }
 
     private var arrivals: some View {
         HStack(spacing: 12) {
-            Image(systemName: "sparkles").font(.title3).foregroundStyle(.tint)
+            Image(systemName: "sparkles").font(.aura(.title3)).foregroundStyle(.tint)
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(library.newArrivals.count) new wallpaper\(library.newArrivals.count == 1 ? "" : "s") arrived").font(.headline)
-                Text("Marked NEW below. Double-click one to set it.").font(.callout).foregroundStyle(.secondary)
+                Text("\(library.newArrivals.count) new wallpaper\(library.newArrivals.count == 1 ? "" : "s") arrived").font(.aura(.headline))
+                Text("Marked NEW below. Double-click one to set it.").font(.aura(.callout)).foregroundStyle(.secondary)
             }
             Spacer()
             Button("Select New") { selection = library.newArrivals }
@@ -75,7 +80,7 @@ struct LibraryView: View {
                 .buttonStyle(.borderless)
         }
         .padding(14)
-        .background(.tint.opacity(0.14), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .glass(cornerRadius: 16, tint: .accentColor)
         .transition(.move(edge: .top).combined(with: .opacity))
     }
 
@@ -135,8 +140,8 @@ struct WallpaperCard: View {
             }
             .overlay(alignment: .bottomLeading) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(wallpaper.title).font(.callout.weight(.semibold)).lineLimit(1)
-                    Text(wallpaper.collection).font(.caption).opacity(0.75).lineLimit(1)
+                    Text(wallpaper.title).font(.aura(.callout, .semibold)).lineLimit(1)
+                    Text(wallpaper.collection).font(.aura(.caption)).opacity(0.75).lineLimit(1)
                 }
                 .foregroundStyle(.white)
                 .shadow(radius: 3)
@@ -157,6 +162,8 @@ struct WallpaperCard: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .cardOutline(selected: selected, active: active)
+            .tilt()
+            .animation(.auraSnappy, value: selected)
             .shadow(color: .black.opacity(hovering ? 0.35 : 0.18), radius: hovering ? 16 : 8, y: hovering ? 8 : 4)
             .scaleEffect(hovering ? 1.025 : 1)
             .animation(.spring(response: 0.3, dampingFraction: 0.75), value: hovering)
@@ -174,7 +181,7 @@ struct RenameSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Rename Wallpaper").font(.title2.bold())
+            Text("Rename Wallpaper").font(.aura(.title2, .bold))
             Form {
                 TextField("Collection", text: $collection)
                 TextField("Title", text: $title)

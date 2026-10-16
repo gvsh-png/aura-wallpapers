@@ -13,7 +13,7 @@ struct StudioView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Get Wallpapers").font(.system(size: 30, weight: .bold, design: .rounded))
+                    Text("Get Wallpapers").font(.aura(size: 30, .bold))
                     Text("Let your AI agent find new wallpapers. Aura writes the prompt, and the results land in your library.")
                         .foregroundStyle(.secondary)
                 }
@@ -21,14 +21,14 @@ struct StudioView: View {
                 step(1, "What do you want?") {
                     TextField("Anything: a place, a mood, a style, a game, a character…", text: $studio.subject)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 22, weight: .semibold, design: .rounded))
+                        .font(.aura(size: 22, .semibold))
                         .padding(12)
                         .background(.background.opacity(0.5), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack {
                             ForEach(suggestions, id: \.self) { name in
                                 Button(name) { studio.subject = name }
-                                    .buttonStyle(.bordered).buttonBorderShape(.capsule).controlSize(.small)
+                                    .buttonStyle(.glass).buttonBorderShape(.capsule).controlSize(.small)
                             }
                         }
                     }
@@ -54,12 +54,12 @@ struct StudioView: View {
                                    selected: studio.agent == agent) { studio.agent = agent }
                         }
                     }
-                    Label(studio.agent.howTo, systemImage: "info.circle").font(.callout).foregroundStyle(.secondary)
+                    Label(studio.agent.howTo, systemImage: "info.circle").font(.aura(.callout)).foregroundStyle(.secondary)
                 }
 
                 step(4, "Copy the prompt") {
                     Text(studio.prompt)
-                        .font(.system(.callout, design: .monospaced))
+                        .font(.auraMono(.callout))
                         .textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(14)
@@ -69,9 +69,10 @@ struct StudioView: View {
                     HStack {
                         Button { studio.copyPrompt() } label: {
                             Label(copiedRecently ? "Copied" : "Copy Prompt", systemImage: copiedRecently ? "checkmark" : "doc.on.doc")
+                                .contentTransition(.symbolEffect(.replace))
                                 .frame(minWidth: 150)
                         }
-                        .buttonStyle(.borderedProminent).controlSize(.large)
+                        .buttonStyle(.glassProminent).controlSize(.large)
                         if studio.agent.destination != nil {
                             Button { studio.copyPrompt(open: true) } label: {
                                 Label("Copy & Open \(studio.agent.hasShell && studio.agent != .cursor ? "Terminal" : studio.agent.rawValue)", systemImage: "arrow.up.forward.app")
@@ -79,7 +80,7 @@ struct StudioView: View {
                             .controlSize(.large)
                         }
                         Spacer()
-                        if !studio.canCopy { Text("Describe what you want first").font(.callout).foregroundStyle(.orange) }
+                        if !studio.canCopy { Text("Describe what you want first").font(.aura(.callout)).foregroundStyle(.orange) }
                     }
                     .disabled(!studio.canCopy)
                 }
@@ -99,16 +100,16 @@ struct StudioView: View {
     @ViewBuilder private var results: some View {
         HStack(spacing: 12) {
             Image(systemName: library.newArrivals.isEmpty ? "tray" : "sparkles")
-                .font(.title2).foregroundStyle(.tint)
+                .font(.aura(.title2)).foregroundStyle(.tint)
                 .symbolEffect(.pulse, isActive: studio.lastCopied != nil && library.newArrivals.isEmpty)
             VStack(alignment: .leading, spacing: 2) {
                 Text(library.newArrivals.isEmpty ? "Watching your library…" : "\(library.newArrivals.count) new wallpapers arrived")
-                    .font(.headline)
+                    .font(.aura(.headline))
                 Text("Coding agents save into ~/Pictures/Wallpapers. They show up here by themselves.")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .font(.aura(.callout)).foregroundStyle(.secondary)
             }
             Spacer()
-            if !library.newArrivals.isEmpty { Button("Show Them", action: showLibrary).buttonStyle(.borderedProminent) }
+            if !library.newArrivals.isEmpty { Button("Show Them", action: showLibrary).buttonStyle(.glassProminent) }
         }
 
         if !library.newArrivals.isEmpty {
@@ -127,8 +128,8 @@ struct StudioView: View {
 
         HStack {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Chat agent?").font(.headline)
-                Text("Copy its whole reply, then paste it here. Aura downloads every link.").font(.callout).foregroundStyle(.secondary)
+                Text("Chat agent?").font(.aura(.headline))
+                Text("Copy its whole reply, then paste it here. Aura downloads every link.").font(.aura(.callout)).foregroundStyle(.secondary)
             }
             Spacer()
             Button { studio.pasteReply() } label: { Label("Paste Reply", systemImage: "doc.on.clipboard") }
@@ -145,11 +146,11 @@ struct StudioView: View {
                         case .failed: Image(systemName: "xmark.octagon.fill").foregroundStyle(.red)
                         }
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(job.source.host() ?? job.source.absoluteString).font(.callout.weight(.medium))
+                            Text(job.source.host() ?? job.source.absoluteString).font(.aura(.callout, .medium))
                             switch job.state {
-                            case .running: Text(job.source.lastPathComponent).font(.caption).foregroundStyle(.secondary)
-                            case .done(let name): Text(name).font(.caption).foregroundStyle(.secondary)
-                            case .failed(let why): Text(why).font(.caption).foregroundStyle(.red)
+                            case .running: Text(job.source.lastPathComponent).font(.aura(.caption)).foregroundStyle(.secondary)
+                            case .done(let name): Text(name).font(.aura(.caption)).foregroundStyle(.secondary)
+                            case .failed(let why): Text(why).font(.aura(.caption)).foregroundStyle(.red)
                             }
                         }
                         .lineLimit(1)
@@ -164,11 +165,11 @@ struct StudioView: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(spacing: 10) {
                     Text("\(n)")
-                        .font(.system(.callout, design: .rounded).bold())
+                        .font(.aura(.callout, .bold))
                         .frame(width: 24, height: 24)
                         .background(.tint, in: Circle())
                         .foregroundStyle(.white)
-                    Text(title).font(.title3.bold())
+                    Text(title).font(.aura(.title3, .bold))
                 }
                 content()
             }
@@ -176,12 +177,12 @@ struct StudioView: View {
     }
 
     private func choice(_ title: String, _ symbol: String, _ caption: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        Button { withAnimation(.auraSpring) { action() } } label: {
             HStack(spacing: 10) {
-                Image(systemName: symbol).font(.title2).frame(width: 30)
+                Image(systemName: symbol).font(.aura(.title2)).frame(width: 30)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.headline)
-                    Text(caption).font(.caption).foregroundStyle(.secondary)
+                    Text(title).font(.aura(.headline))
+                    Text(caption).font(.aura(.caption)).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
             }

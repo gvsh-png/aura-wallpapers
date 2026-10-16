@@ -8,6 +8,7 @@ enum Destination: Hashable {
 struct ContentView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(WallpaperEngine.self) private var engine
+    @Environment(Updater.self) private var updater
     @State private var section: Destination? = .all
     @State private var selection: Set<String> = []
     @State private var search = ""
@@ -24,9 +25,17 @@ struct ContentView: View {
             ZStack {
                 Backdrop()
                 detail
+                    .id(section)
+                    .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 10)).combined(with: .scale(scale: 0.99)),
+                                            removal: .opacity))
             }
+            .safeAreaInset(edge: .top, spacing: 0) { UpdateBanner() }
+            .animation(.auraSpring, value: section)
+            .animation(.auraSpring, value: updater.state)
         }
         .tint(tint)
+        .font(.aura(.body))
+        .animation(.easeInOut(duration: 0.8), value: engine.palette)
         .onAppear { NSApp.setActivationPolicy(.regular) }
         .onDisappear { NSApp.setActivationPolicy(.accessory) }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.image, .movie, .zip], allowsMultipleSelection: true) { result in
@@ -148,20 +157,25 @@ struct NowPlaying: View {
                     .frame(width: 54, height: 34)
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(current.title).font(.callout.weight(.semibold)).lineLimit(1)
+                    Text(current.title).font(.aura(.callout, .semibold)).lineLimit(1)
                     Text(current.kind == .live ? (engine.pauseReason ?? "Live") : "On desktop")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.aura(.caption)).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)
                 if engine.isLive {
                     Button { engine.userPaused.toggle() } label: {
                         Image(systemName: engine.userPaused ? "play.fill" : "pause.fill")
+                            .contentTransition(.symbolEffect(.replace))
+                            .frame(width: 28, height: 28)
+                            .glass(cornerRadius: 14, shadow: false)
                     }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(.plain)
                 }
             }
             .padding(10)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .glass(cornerRadius: 14)
+            .id(current.id)
+            .transition(.opacity.combined(with: .scale(scale: 0.96)))
         }
     }
 }
