@@ -17,7 +17,7 @@ A native macOS wallpaper app for static and animated wallpapers. It builds a the
   - Coding agents download straight into the library. New files show up within seconds, marked **NEW**.
   - Chat agents reply with links. Copy the reply, click **Paste Reply**, and Aura downloads each file.
 - **Agent instructions.** Aura writes `AGENTS.md` into the library folder, plus `CLAUDE.md` and `GEMINI.md` that import it. An agent opened there already knows the layout, naming and quality rules.
-- **Starter pack.** On first launch with an empty library, Aura downloads a general set of landscapes, space, abstract, nature and city stills, plus ambient sky, water and abstract loops.
+- **Starter pack.** On first launch with an empty library, Aura downloads a random 1–4 stills (landscapes, space, abstract, nature, cities) and 1–4 ambient loops (sky, water, abstract). **Download Starter Pack** in Customize adds another random handful.
 - **Sharing.** Use the share sheet or copy files, or export a selection as a `.zip` pack. Drop a pack (or images and videos) onto Aura to import it.
 - **Design.** Frosted glass panels and buttons over a soft aurora drawn from your wallpaper's colors, the Geist typeface, and spring animations throughout. Cards tilt toward the pointer, and the grid and sections animate in. Reduce Motion is respected.
 - **Menu bar.** Pause or resume, turn animation on/off, set speed, shuffle, and open favorites. Closing the window keeps the wallpaper running.

@@ -1,12 +1,14 @@
 import Foundation
 
-/// A general-purpose set of wallpapers, downloaded on first launch (or from Customize → Library).
+/// A general-purpose pool of wallpapers. First launch (and Customize → Library → Download Starter Pack)
+/// fetches a random handful: 1–4 static and 1–4 animated that aren't in the library yet.
 /// Files are fetched from their sources, not bundled: wallhaven.cc (stills) and mixkit.co (Mixkit License videos).
 enum StarterPack {
     struct Item {
         let collection: String
         let title: String
         let url: String
+        var isAnimated: Bool { url.hasSuffix(".mp4") }
     }
 
     static let items: [Item] = [
@@ -39,13 +41,20 @@ enum StarterPack {
         Item(collection: "Abstract", title: "Ink flow", url: "https://assets.mixkit.co/videos/44818/44818-1080.mp4"),
     ]
 
-    /// Downloads whatever is missing. Returns how many arrived.
+    /// Random 1–4 static and 1–4 animated items from the pool that the library doesn't have yet.
+    static func pick(excluding have: Set<String>) -> [Item] {
+        let missing = items.filter { !have.contains("\($0.collection) - \($0.title)") }
+        let stills = missing.filter { !$0.isAnimated }.shuffled().prefix(Int.random(in: 1...4))
+        let loops = missing.filter(\.isAnimated).shuffled().prefix(Int.random(in: 1...4))
+        return Array(stills + loops)
+    }
+
+    /// Downloads a random pick. Returns how many arrived.
     @MainActor
     static func install() async -> Int {
-        let have = Set(LibraryStore.shared.items.map(\.name))
-        let missing = items.filter { !have.contains("\($0.collection) - \($0.title)") }
+        let picked = pick(excluding: Set(LibraryStore.shared.items.map(\.name)))
         return await withTaskGroup(of: Bool.self) { group in
-            for item in missing {
+            for item in picked {
                 group.addTask { @MainActor in
                     guard let url = URL(string: item.url) else { return false }
                     return (try? await Downloader.fetch(url, collection: item.collection, title: item.title)) != nil
