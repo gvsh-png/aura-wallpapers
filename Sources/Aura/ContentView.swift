@@ -22,13 +22,15 @@ struct ContentView: View {
             Sidebar(section: $section)
                 .navigationSplitViewColumnWidth(min: 210, ideal: 230, max: 280)
         } detail: {
+            // Backdrop goes in .background, not a ZStack sibling: an .ignoresSafeArea() sibling
+            // shifts hit-testing by the toolbar height in windowed mode (buttons clickable above where they draw).
             ZStack {
-                Backdrop()
                 detail
                     .id(section)
-                    .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 10)).combined(with: .scale(scale: 0.99)),
-                                            removal: .opacity))
+                    .transition(.asymmetric(insertion: .opacity.combined(with: .scale(scale: 0.99)), removal: .opacity))
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background { Backdrop() }
             .safeAreaInset(edge: .top, spacing: 0) { UpdateBanner() }
             .animation(.auraSpring, value: section)
             .animation(.auraSpring, value: updater.state)

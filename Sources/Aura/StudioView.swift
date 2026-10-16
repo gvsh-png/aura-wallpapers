@@ -224,6 +224,10 @@ struct AgentRunPanel: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(session.agent?.rawValue ?? "Agent").font(.aura(.title3, .bold))
                         Text(statusText).font(.aura(.callout)).foregroundStyle(.secondary)
+                    if session.allowAll && session.isActive {
+                        Label("Allowing everything this run", systemImage: "checkmark.shield.fill")
+                            .font(.aura(.caption, .medium)).foregroundStyle(.orange)
+                    }
                     }
                     Spacer()
                     if session.isActive {
@@ -240,6 +244,12 @@ struct AgentRunPanel: View {
                                 Button(option.name) { withAnimation(.auraSpring) { session.respond(request, optionID: option.id) } }
                                     .buttonStyle(GlassButtonStyle(prominent: option.kind.hasPrefix("allow")))
                             }
+                            Spacer()
+                            Button { withAnimation(.auraSpring) { session.approveAll(request) } } label: {
+                                Label("Allow All", systemImage: "checkmark.seal")
+                            }
+                            .buttonStyle(.glass)
+                            .help("Approve this and everything else the agent asks for until this run ends")
                         }
                     }
                     .padding(14)

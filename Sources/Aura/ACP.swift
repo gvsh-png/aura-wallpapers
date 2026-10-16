@@ -34,6 +34,8 @@ final class ACPSession {
     private(set) var transcript = ""
     private(set) var tools: [ToolCall] = []
     private(set) var permissions: [PermissionRequest] = []
+    /// "Allow All" for the current run: later requests are approved without asking.
+    private(set) var allowAll = false
 
     var isActive: Bool { phase == .starting || phase == .running }
 
@@ -52,6 +54,7 @@ final class ACPSession {
         transcript = ""
         tools = []
         permissions = []
+        allowAll = false
         stderrTail = ""
 
         let path = await LoginShell.path()
@@ -87,6 +90,18 @@ final class ACPSession {
         permissions.removeAll { $0.id == request.id }
         let outcome: [String: Any] = optionID.map { ["outcome": "selected", "optionId": $0] } ?? ["outcome": "cancelled"]
         write(["jsonrpc": "2.0", "id": request.rpcID, "result": ["outcome": outcome]])
+    }
+
+    /// Approves this request and every later one in this run.
+    func approveAll(_ request: PermissionRequest) {
+        allowAll = true
+        respond(request, optionID: Self.allowOption(request)?.id)
+        permissions.forEach { respond($0, optionID: Self.allowOption($0)?.id) }
+    }
+
+    /// Prefers "always" so the agent remembers too, then "once".
+    private static func allowOption(_ request: PermissionRequest) -> PermissionRequest.Option? {
+        request.options.first { $0.kind == "allow_always" } ?? request.options.first { $0.kind == "allow_once" }
     }
 
     func stop() {
@@ -174,7 +189,12 @@ final class ACPSession {
             }
             let toolID = tool?["toolCallId"] as? String
             let title = tool?["title"] as? String ?? tools.first { $0.id == toolID }?.title ?? "The agent wants to run a tool"
-            permissions.append(PermissionRequest(rpcID: id, title: title, options: options))
+            let request = PermissionRequest(rpcID: id, title: title, options: options)
+            if allowAll, let allow = Self.allowOption(request) {
+                write(["jsonrpc": "2.0", "id": id, "result": ["outcome": ["outcome": "selected", "optionId": allow.id]]])
+            } else {
+                permissions.append(request)
+            }
         case (_?, let id?):
             // fs/terminal and anything else we didn't offer.
             write(["jsonrpc": "2.0", "id": id, "error": ["code": -32601, "message": "Not supported by Aura"]])
