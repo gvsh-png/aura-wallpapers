@@ -102,9 +102,14 @@ enum ThemeManager {
 
     static func highlight(_ color: NSColor) -> NSColor { (color.srgb.blended(withFraction: 0.45, of: .white) ?? color).srgb }
 
+    private static let accentKeys = ["AppleAccentColor"]
+    private static let highlightKeys = ["AppleHighlightColor"]
+    private static let iconKeys = ["AppleIconAppearanceTheme", "AppleIconAppearanceTintColor", "AppleIconAppearanceCustomTintColor"]
+
     static func apply(_ p: Palette) {
         let c = p.accent.srgb
         if Prefs.bool(Prefs.themeAccent) {
+            remember(accentKeys)
             let index = accentIndex(c)
             if index == 4 {
                 Shell.run(defaults, ["delete", "-g", "AppleAccentColor"]) // Blue is the default
@@ -113,16 +118,21 @@ enum ThemeManager {
             }
         }
         if Prefs.bool(Prefs.themeHighlight) {
+            remember(highlightKeys)
             Shell.run(defaults, ["write", "-g", "AppleHighlightColor", "-string", "\(rgb(highlight(c))) Other"])
         }
 
-        var dark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        var dark = isDarkMode
         if Prefs.bool(Prefs.matchAppearance), p.isDark != dark {
-            NSAppleScript(source: "tell application \"System Events\" to tell appearance preferences to set dark mode to \(p.isDark)")?.executeAndReturnError(nil)
+            if UserDefaults.standard.object(forKey: "originalDarkMode") == nil {
+                UserDefaults.standard.set(dark, forKey: "originalDarkMode")
+            }
+            setDarkMode(p.isDark)
             dark = p.isDark
         }
 
         if Prefs.bool(Prefs.tintIcons) {
+            remember(iconKeys)
             let theme = dark ? "TintedDark" : "TintedLight"
             let tint = "\(rgb(iconTint(c))) 1.000000"
             Shell.run(defaults, ["write", "-g", "AppleIconAppearanceTheme", "-string", theme])
@@ -137,28 +147,73 @@ enum ThemeManager {
         broadcast()
     }
 
+    /// Puts back everything the theme changed, exactly as it was before Aura touched it.
     static func reset() {
         resetAccent()
         resetHighlight()
         resetIcons()
+        resetAppearance()
     }
 
     static func resetAccent() {
-        Shell.run(defaults, ["delete", "-g", "AppleAccentColor"])
+        restore(accentKeys)
         broadcast()
     }
 
     static func resetHighlight() {
-        Shell.run(defaults, ["delete", "-g", "AppleHighlightColor"])
+        restore(highlightKeys)
         broadcast()
     }
 
     static func resetIcons() {
-        for key in ["AppleIconAppearanceTheme", "AppleIconAppearanceTintColor", "AppleIconAppearanceCustomTintColor"] {
-            Shell.run(defaults, ["delete", "-g", key])
-        }
+        restore(iconKeys)
         UserDefaults.standard.removeObject(forKey: "lastIconTint")
         Shell.run("/usr/bin/killall", ["Dock"])
+    }
+
+    static func resetAppearance() {
+        guard let original = UserDefaults.standard.object(forKey: "originalDarkMode") as? Bool else { return }
+        UserDefaults.standard.removeObject(forKey: "originalDarkMode")
+        if original != isDarkMode { setDarkMode(original) }
+    }
+
+    // MARK: - The user's own look
+
+    private static let snapshotKey = "originalTheme"
+    private static let absent = "__absent__"
+
+    /// Saves the user's current values the first time Aura is about to change them.
+    private static func remember(_ keys: [String]) {
+        var snapshot = UserDefaults.standard.dictionary(forKey: snapshotKey) ?? [:]
+        guard keys.contains(where: { snapshot[$0] == nil }) else { return }
+        CFPreferencesAppSynchronize(kCFPreferencesAnyApplication)
+        for key in keys where snapshot[key] == nil {
+            snapshot[key] = CFPreferencesCopyAppValue(key as CFString, kCFPreferencesAnyApplication) ?? absent as CFString
+        }
+        UserDefaults.standard.set(snapshot, forKey: snapshotKey)
+    }
+
+    /// Writes the saved values back (or removes the keys if the user never had them), then forgets them.
+    private static func restore(_ keys: [String]) {
+        var snapshot = UserDefaults.standard.dictionary(forKey: snapshotKey) ?? [:]
+        for key in keys {
+            switch snapshot[key] {
+            case let value as String where value != absent:
+                Shell.run(defaults, ["write", "-g", key, "-string", value])
+            case let value as NSNumber:
+                Shell.run(defaults, ["write", "-g", key, "-int", String(value.intValue)])
+            default: // saved as absent, or saved before Aura kept snapshots
+                Shell.run(defaults, ["delete", "-g", key])
+            }
+            snapshot[key] = nil
+        }
+        UserDefaults.standard.set(snapshot, forKey: snapshotKey)
+    }
+
+    private static var isDarkMode: Bool { NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua }
+
+    private static func setDarkMode(_ dark: Bool) {
+        NSAppleScript(source: "tell application \"System Events\" to tell appearance preferences to set dark mode to \(dark)")?.executeAndReturnError(nil)
     }
 
     private static func broadcast() {

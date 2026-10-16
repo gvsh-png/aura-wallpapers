@@ -21,6 +21,9 @@ struct MenuBarMenu: View {
             ForEach([0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0], id: \.self) { Text("\($0.formatted())×").tag($0) }
         }
         .disabled(!animate)
+        if engine.current != nil {
+            Button("Turn Off Wallpaper") { engine.turnOff() }
+        }
         Divider()
         Button("Shuffle Wallpaper") { engine.shuffle(from: library.items) }
             .keyboardShortcut("s")

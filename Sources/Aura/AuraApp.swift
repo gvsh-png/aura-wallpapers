@@ -50,6 +50,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated {
             let library = LibraryStore.shared
             WallpaperEngine.shared.restore()
+            // 1.1.4: icon tinting became opt-in. Undo tinting left over from older versions.
+            if UserDefaults.standard.string(forKey: "lastIconTint") != nil, !Prefs.bool(Prefs.tintIcons) {
+                ThemeManager.resetIcons()
+            }
             // First launch with an empty library: fetch the starter pack.
             if !UserDefaults.standard.bool(forKey: "starterOffered") {
                 UserDefaults.standard.set(true, forKey: "starterOffered")

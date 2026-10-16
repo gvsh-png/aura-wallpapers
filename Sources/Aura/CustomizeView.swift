@@ -3,6 +3,7 @@ import SwiftUI
 /// Every setting in one place. Shown in the main window (sidebar → Customize) and as the Settings window.
 struct CustomizeView: View {
     @Environment(LibraryStore.self) private var library
+    @Environment(WallpaperEngine.self) private var engine
     @AppStorage(Prefs.animate) private var animate = true
     @AppStorage(Prefs.speed) private var speed = 1.0
     @AppStorage(Prefs.scaling) private var scaling = Scaling.fill.rawValue
@@ -44,10 +45,15 @@ struct CustomizeView: View {
                         Text("\(Int((dim * 100).rounded()))%").monospacedDigit().frame(width: 48, alignment: .trailing)
                     }
                 }
+                LabeledContent("Aura wallpaper") {
+                    Button("Turn Off & Restore Mine") { WallpaperEngine.shared.turnOff() }
+                        .buttonStyle(.glass)
+                        .disabled(engine.current == nil)
+                }
             } header: {
                 Text("Wallpaper")
             } footer: {
-                Text("With animation off, animated wallpapers show a still frame.").foregroundStyle(.secondary)
+                Text("With animation off, animated wallpapers show a still frame. Turning Aura's wallpaper off brings back the desktop picture you had before.").foregroundStyle(.secondary)
             }
 
             Section("Power") {
@@ -102,13 +108,13 @@ struct CustomizeView: View {
     }
 }
 
-/// Which parts of macOS the wallpaper theme touches. Turning a part off restores the macOS default for it.
+/// Which parts of macOS the wallpaper theme touches. Turning a part off restores what you had before Aura changed it.
 struct ThemeOptions: View {
     @Environment(WallpaperEngine.self) private var engine
     @AppStorage(Prefs.autoTheme) private var autoTheme = true
     @AppStorage(Prefs.themeAccent) private var themeAccent = true
     @AppStorage(Prefs.themeHighlight) private var themeHighlight = true
-    @AppStorage(Prefs.tintIcons) private var tintIcons = true
+    @AppStorage(Prefs.tintIcons) private var tintIcons = false
     @AppStorage(Prefs.tintStrength) private var tintStrength = TintStrength.balanced.rawValue
     @AppStorage(Prefs.matchAppearance) private var matchAppearance = false
 
@@ -127,7 +133,7 @@ struct ThemeOptions: View {
         .disabled(!tintIcons)
         .onChange(of: tintStrength) { reapply() }
         Toggle("Match Light/Dark mode to the wallpaper", isOn: $matchAppearance)
-            .onChange(of: matchAppearance) { _, on in if on { reapply() } }
+            .onChange(of: matchAppearance) { _, on in on ? reapply() : ThemeManager.resetAppearance() }
     }
 
     private func reapply() {

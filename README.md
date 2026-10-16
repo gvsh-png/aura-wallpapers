@@ -10,10 +10,12 @@ A native macOS wallpaper app for static and animated wallpapers. It builds a the
   - Wallpaper: animation on/off, speed (0.25×–2×), sound and volume, scaling (fill, fit, stretch), dimming.
   - Power: pause when the desktop is covered, on battery, or in Low Power Mode. The display can still sleep.
   - Rotation: change the wallpaper every 15 minutes to every day, picking from all wallpapers, favorites, static only or animated only.
-  - Theme: turn the accent color, text highlight, app-icon tint (subtle, balanced or vivid) and Light/Dark matching on or off one by one. Turning a part off restores the macOS default for it.
+  - Theme: turn the accent color, text highlight, app-icon tint (subtle, balanced or vivid, off by default) and Light/Dark matching on or off one by one. Aura saves your own settings before it changes anything, and turning a part off puts yours back.
+  - Turn off Aura's wallpaper (from the sidebar card, the menu bar or Customize) and your own desktop picture comes back.
   - App: open at login, show or hide the menu bar icon.
 - **Theme from your wallpaper.** Aura pulls a palette from the active wallpaper and applies it to macOS, either automatically or with one click. You can also copy the palette as CSS.
-- **Get Wallpapers with any agent.** Describe what you want (a place, a mood, a style, anything), choose static or animated and pick an agent, then copy the prompt. Supported agents: Claude Code, Cursor, Codex, ChatGPT, Claude.ai and Gemini.
+- **Get Wallpapers with any agent.** Describe what you want (a place, a mood, a style, anything), choose static or animated and pick an agent. Supported agents: Claude Code, Codex, Gemini CLI, Cursor, ChatGPT, Claude.ai and Gemini.
+  - **Run Now (Agent Client Protocol):** with Claude Code, Codex or Gemini CLI, Aura sends the prompt straight to the agent over [ACP](https://agentclientprotocol.com). You watch its progress live and approve each download it wants to run. Claude Code and Codex start through `npx` (Node.js needed), and you must already be signed in to the agent.
   - Coding agents download straight into the library. New files show up within seconds, marked **NEW**.
   - Chat agents reply with links. Copy the reply, click **Paste Reply**, and Aura downloads each file.
 - **Agent instructions.** Aura writes `AGENTS.md` into the library folder, plus `CLAUDE.md` and `GEMINI.md` that import it. An agent opened there already knows the layout, naming and quality rules.
@@ -62,6 +64,7 @@ Sources/Aura/
   Updater.swift         GitHub Releases updater + update UI
   Design.swift          font, glass, button style, tilt and appear motion
   Agents.swift          agent targets, prompt builder, AGENTS.md, downloader
+  ACP.swift             Agent Client Protocol client (JSON-RPC over stdio)
   StarterPack.swift     first-run wallpaper list
   CustomizeView.swift   all settings
   *View.swift           other SwiftUI screens

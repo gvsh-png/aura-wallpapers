@@ -74,7 +74,7 @@ final class LibraryStore {
 
     func trash(_ ws: [Wallpaper]) {
         if let current = WallpaperEngine.shared.current, ws.contains(where: { $0.id == current.id }) {
-            WallpaperEngine.shared.stop()
+            WallpaperEngine.shared.turnOff()
         }
         NSWorkspace.shared.recycle(ws.map(\.url)) { _, _ in
             Task { @MainActor in self.reload() }

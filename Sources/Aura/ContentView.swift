@@ -171,6 +171,14 @@ struct NowPlaying: View {
                     }
                     .buttonStyle(.plain)
                 }
+                Button { withAnimation(.auraSpring) { engine.turnOff() } } label: {
+                    Image(systemName: "xmark")
+                        .font(.aura(.caption, .bold))
+                        .frame(width: 28, height: 28)
+                        .glass(cornerRadius: 14, shadow: false)
+                }
+                .buttonStyle(.plain)
+                .help("Turn off Aura's wallpaper and bring back your own")
             }
             .padding(10)
             .glass(cornerRadius: 14)

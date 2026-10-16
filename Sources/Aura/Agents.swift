@@ -6,6 +6,7 @@ enum AgentTarget: String, CaseIterable, Identifiable {
     case claudeCode = "Claude Code"
     case cursor = "Cursor"
     case codex = "Codex"
+    case geminiCLI = "Gemini CLI"
     case chatGPT = "ChatGPT"
     case claude = "Claude.ai"
     case gemini = "Gemini"
@@ -13,13 +14,26 @@ enum AgentTarget: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     /// Agents with a terminal download straight into the library; chat agents reply with links.
-    var hasShell: Bool { [.claudeCode, .cursor, .codex].contains(self) }
+    var hasShell: Bool { [.claudeCode, .cursor, .codex, .geminiCLI].contains(self) }
+
+    /// How to start this agent as an Agent Client Protocol server, when it supports one.
+    var acpCommand: (String, [String])? {
+        switch self {
+        case .claudeCode: ("npx", ["-y", "@agentclientprotocol/claude-agent-acp"])
+        case .codex: ("npx", ["-y", "@agentclientprotocol/codex-acp"])
+        case .geminiCLI: ("gemini", ["--experimental-acp"])
+        default: nil
+        }
+    }
+
+    var supportsACP: Bool { acpCommand != nil }
 
     var symbol: String {
         switch self {
         case .claudeCode: "terminal"
         case .cursor: "cursorarrow.rays"
         case .codex: "chevron.left.forwardslash.chevron.right"
+        case .geminiCLI: "sparkles"
         case .chatGPT: "bubble.left.and.text.bubble.right"
         case .claude: "sparkle"
         case .gemini: "diamond"
@@ -27,7 +41,10 @@ enum AgentTarget: String, CaseIterable, Identifiable {
     }
 
     var howTo: String {
-        hasShell
+        if supportsACP {
+            return "Click Run Now. Aura sends the prompt straight to \(rawValue) and shows its progress here. Approve its downloads as they come up. You can also copy the prompt instead."
+        }
+        return hasShell
             ? "Paste into \(rawValue). It downloads straight into your library, and Aura shows new wallpapers within seconds."
             : "Paste into \(rawValue) with web search on. Copy its whole reply, then click Paste Reply here."
     }
@@ -35,7 +52,7 @@ enum AgentTarget: String, CaseIterable, Identifiable {
     /// Where "Copy & Open" goes.
     var destination: URL? {
         switch self {
-        case .claudeCode, .codex: NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal")
+        case .claudeCode, .codex, .geminiCLI: NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal")
         case .cursor: NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.todesktop.230313mzl4w4u92")
         case .chatGPT: URL(string: "https://chatgpt.com")
         case .claude: URL(string: "https://claude.ai/new")
@@ -197,6 +214,12 @@ final class AgentStudio {
     }
     var jobs: [DownloadJob] = []
     var lastCopied: Date?
+    let acp = ACPSession()
+
+    /// Sends the prompt straight to the agent over ACP.
+    func runNow() {
+        Task { await acp.run(agent, prompt: prompt) }
+    }
 
     var prompt: String { PromptBuilder.make(subject: subject, hints: hints, kind: kind, count: count, agent: agent) }
     var canCopy: Bool { !subject.trimmingCharacters(in: .whitespaces).isEmpty }

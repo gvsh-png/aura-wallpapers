@@ -99,7 +99,8 @@ struct ThemeView: View {
             }
             .controlSize(.extraLarge)
             Spacer()
-            Button("Restore macOS Default", role: .destructive) { ThemeManager.reset() }
+            Button("Restore My Original Look", role: .destructive) { ThemeManager.reset() }
+                .help("Puts back the accent, highlight, icon style and Light/Dark mode you had before Aura")
                 .controlSize(.large)
         }
     }

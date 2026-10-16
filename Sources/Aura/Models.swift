@@ -71,7 +71,7 @@ enum Prefs {
 
     static func register() {
         UserDefaults.standard.register(defaults: [
-            autoTheme: true, themeAccent: true, themeHighlight: true, tintIcons: true,
+            autoTheme: true, themeAccent: true, themeHighlight: true, tintIcons: false,
             tintStrength: TintStrength.balanced.rawValue, matchAppearance: false,
             animate: true, speed: 1.0, scaling: Scaling.fill.rawValue, dim: 0.0, sound: false, volume: 0.5,
             pauseWhenCovered: true, pauseOnBattery: false, pauseInLowPower: true,

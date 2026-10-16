@@ -67,12 +67,20 @@ struct StudioView: View {
                         .background(.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                         .clipped()
                     HStack {
+                        if studio.agent.supportsACP {
+                            Button { studio.runNow() } label: {
+                                Label(studio.acp.isActive ? "Running…" : "Run Now", systemImage: "play.fill")
+                                    .frame(minWidth: 130)
+                            }
+                            .buttonStyle(.glassProminent)
+                            .disabled(studio.acp.isActive)
+                        }
                         Button { studio.copyPrompt() } label: {
                             Label(copiedRecently ? "Copied" : "Copy Prompt", systemImage: copiedRecently ? "checkmark" : "doc.on.doc")
                                 .contentTransition(.symbolEffect(.replace))
-                                .frame(minWidth: 150)
+                                .frame(minWidth: 130)
                         }
-                        .buttonStyle(.glassProminent).controlSize(.large)
+                        .buttonStyle(studio.agent.supportsACP ? GlassButtonStyle() : GlassButtonStyle(prominent: true))
                         if studio.agent.destination != nil {
                             Button { studio.copyPrompt(open: true) } label: {
                                 Label("Copy & Open \(studio.agent.hasShell && studio.agent != .cursor ? "Terminal" : studio.agent.rawValue)", systemImage: "arrow.up.forward.app")
@@ -85,9 +93,15 @@ struct StudioView: View {
                     .disabled(!studio.canCopy)
                 }
 
+                if studio.acp.phase != .idle {
+                    AgentRunPanel(session: studio.acp)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+
                 step(5, "Bring the results in") { results }
             }
             .padding(28)
+            .animation(.auraSpring, value: studio.acp.phase)
             .frame(maxWidth: 860)
             .frame(maxWidth: .infinity)
         }
@@ -195,5 +209,99 @@ struct StudioView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Live view of an agent run over ACP: status, tool calls, permission prompts and the agent's reply.
+struct AgentRunPanel: View {
+    let session: ACPSession
+
+    var body: some View {
+        Panel {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(spacing: 10) {
+                    statusIcon
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(session.agent?.rawValue ?? "Agent").font(.aura(.title3, .bold))
+                        Text(statusText).font(.aura(.callout)).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if session.isActive {
+                        Button("Stop", role: .destructive) { session.stop() }.buttonStyle(.glass)
+                    }
+                }
+
+                ForEach(session.permissions) { request in
+                    VStack(alignment: .leading, spacing: 10) {
+                        Label("Allow this?", systemImage: "hand.raised.fill").font(.aura(.headline)).foregroundStyle(.orange)
+                        Text(request.title).font(.auraMono(.callout)).textSelection(.enabled).lineLimit(6)
+                        HStack {
+                            ForEach(request.options) { option in
+                                Button(option.name) { withAnimation(.auraSpring) { session.respond(request, optionID: option.id) } }
+                                    .buttonStyle(GlassButtonStyle(prominent: option.kind.hasPrefix("allow")))
+                            }
+                        }
+                    }
+                    .padding(14)
+                    .glass(cornerRadius: 14, tint: .orange, shadow: false)
+                    .transition(.scale(scale: 0.96).combined(with: .opacity))
+                }
+
+                if !session.tools.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(session.tools.suffix(8)) { tool in
+                            HStack(spacing: 8) {
+                                toolIcon(tool.status)
+                                Text(tool.title).font(.aura(.callout)).lineLimit(1).truncationMode(.middle)
+                            }
+                            .transition(.opacity.combined(with: .offset(y: 6)))
+                        }
+                    }
+                }
+
+                if !session.transcript.isEmpty {
+                    ScrollView {
+                        Text(session.transcript)
+                            .font(.aura(.callout))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .defaultScrollAnchor(.bottom)
+                    .frame(maxHeight: 200)
+                    .padding(12)
+                    .background(.black.opacity(0.2), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+            }
+            .animation(.auraSpring, value: session.permissions.count)
+            .animation(.auraSpring, value: session.tools.count)
+        }
+    }
+
+    private var statusText: String {
+        switch session.phase {
+        case .idle: ""
+        case .starting: "Starting… (the first run downloads the agent adapter)"
+        case .running: session.permissions.isEmpty ? "Working. New wallpapers show up in your library as they arrive." : "Waiting for your approval"
+        case .finished(let why): why
+        case .failed(let why): why
+        }
+    }
+
+    @ViewBuilder private var statusIcon: some View {
+        switch session.phase {
+        case .starting, .running: ProgressView().controlSize(.small).frame(width: 28)
+        case .finished: Image(systemName: "checkmark.circle.fill").font(.title2).foregroundStyle(.green).frame(width: 28)
+        case .failed: Image(systemName: "exclamationmark.triangle.fill").font(.title2).foregroundStyle(.orange).frame(width: 28)
+        case .idle: EmptyView()
+        }
+    }
+
+    @ViewBuilder private func toolIcon(_ status: String) -> some View {
+        switch status {
+        case "completed": Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+        case "failed": Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+        case "in_progress": ProgressView().controlSize(.mini)
+        default: Image(systemName: "circle.dotted").foregroundStyle(.secondary)
+        }
     }
 }

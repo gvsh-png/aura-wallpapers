@@ -55,6 +55,7 @@ final class WallpaperEngine {
     }
 
     func apply(_ w: Wallpaper) async {
+        rememberOriginalDesktop()
         current = w
         UserDefaults.standard.set(w.url.path, forKey: "currentWallpaper")
         UserDefaults.standard.set(Date.now.timeIntervalSince1970, forKey: "lastRotation")
@@ -85,12 +86,44 @@ final class WallpaperEngine {
         }
     }
 
-    func stop() {
+    /// Stops Aura's wallpaper and puts back the desktop picture you had before Aura changed it.
+    func turnOff() {
         current = nil
         palette = nil
         stillURL = nil
         UserDefaults.standard.removeObject(forKey: "currentWallpaper")
         rebuild()
+        restoreOriginalDesktop()
+    }
+
+    var hasOriginalDesktop: Bool { UserDefaults.standard.dictionary(forKey: Self.originalDesktopKey) != nil }
+
+    // MARK: - The user's own wallpaper
+
+    private static let originalDesktopKey = "originalDesktop"
+
+    private static func screenID(_ screen: NSScreen) -> String {
+        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.stringValue ?? screen.localizedName
+    }
+
+    /// Saves each screen's desktop picture the first time Aura replaces it.
+    private func rememberOriginalDesktop() {
+        guard !hasOriginalDesktop else { return }
+        var saved: [String: String] = [:]
+        for screen in NSScreen.screens {
+            if let url = NSWorkspace.shared.desktopImageURL(for: screen) { saved[Self.screenID(screen)] = url.path }
+        }
+        if !saved.isEmpty { UserDefaults.standard.set(saved, forKey: Self.originalDesktopKey) }
+    }
+
+    private func restoreOriginalDesktop() {
+        guard let saved = UserDefaults.standard.dictionary(forKey: Self.originalDesktopKey) as? [String: String] else { return }
+        for screen in NSScreen.screens {
+            guard let path = saved[Self.screenID(screen)] ?? saved.values.first,
+                  FileManager.default.fileExists(atPath: path) else { continue }
+            try? NSWorkspace.shared.setDesktopImageURL(URL(fileURLWithPath: path), for: screen, options: [:])
+        }
+        UserDefaults.standard.removeObject(forKey: Self.originalDesktopKey)
     }
 
     func adoptRenamed(_ w: Wallpaper) {
