@@ -19,7 +19,20 @@ A native macOS wallpaper app for static and animated wallpapers. It builds a the
 - **Agent instructions.** Aura writes `AGENTS.md` into the library folder, plus `CLAUDE.md` and `GEMINI.md` that import it. An agent opened there already knows the layout, naming and quality rules.
 - **Starter pack.** On first launch with an empty library, Aura downloads a general set of landscapes, space, abstract, nature and city stills, plus ambient sky, water and abstract loops.
 - **Sharing.** Use the share sheet or copy files, or export a selection as a `.zip` pack. Drop a pack (or images and videos) onto Aura to import it.
+- **Design.** Frosted glass panels and buttons over a soft aurora drawn from your wallpaper's colors, the Geist typeface, and spring animations throughout. Cards tilt toward the pointer, and the grid and sections animate in. Reduce Motion is respected.
 - **Menu bar.** Pause or resume, turn animation on/off, set speed, shuffle, and open favorites. Closing the window keeps the wallpaper running.
+
+## Updates
+
+Aura checks this repo's GitHub Releases every 6 hours (Customize → Updates, or right away with **Check Now**). When a newer `vX.Y.Z` release has an `Aura.zip` asset, Aura offers to update. It downloads the zip, checks the bundle ID and code signature, moves the old app to the Trash, puts the new one in its place and relaunches. `Aura --update` does the same from Terminal.
+
+To publish a release:
+
+```sh
+./release.sh 1.2.0 "What changed"   # bumps VERSION, builds, zips, pushes, creates the GitHub release
+```
+
+The repository must be public for other people's copies to see releases.
 
 ## Build
 
@@ -38,11 +51,15 @@ Sources/Aura/
   Engine.swift          desktop picture, video/dim windows, pausing, rotation
   LibraryStore.swift    library folder, import/export, favorites
   Theme.swift           palette extraction + macOS theme writer
+  Updater.swift         GitHub Releases updater + update UI
+  Design.swift          font, glass, button style, tilt and appear motion
   Agents.swift          agent targets, prompt builder, AGENTS.md, downloader
   StarterPack.swift     first-run wallpaper list
   CustomizeView.swift   all settings
   *View.swift           other SwiftUI screens
+Resources/Fonts/        Geist + Geist Mono (SIL Open Font License, see OFL.txt)
 scripts/make-icon.swift renders the app icon
+release.sh              publishes a GitHub release for the updater
 ```
 
 ## Notes
