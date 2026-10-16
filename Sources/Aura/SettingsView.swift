@@ -16,6 +16,9 @@ struct SettingsView: View {
     @AppStorage(Prefs.rotateMinutes) private var rotateMinutes = 0
     @AppStorage(Prefs.rotateSource) private var rotateSource = RotateSource.all.rawValue
     @AppStorage(Prefs.showMenuBarIcon) private var showMenuBarIcon = true
+    @AppStorage(Prefs.minQuality) private var minQuality = MinQuality.uhd.rawValue
+    @AppStorage(Prefs.videoQuality) private var videoQuality = VideoQuality.auto.rawValue
+    @AppStorage(Prefs.capFrameRate) private var capFrameRate = true
     @State private var openAtLogin = LoginItem.isEnabled
 
     var body: some View {
@@ -54,6 +57,25 @@ struct SettingsView: View {
                 SectionHeader("Wallpaper")
             } footer: {
                 Text("With animation off, animated wallpapers show a still frame. Turning Aura's wallpaper off brings back the desktop picture you had before.").font(.aura(.caption)).foregroundStyle(.secondary)
+            }
+
+            Section {
+                Picker("Minimum download quality", selection: $minQuality) {
+                    ForEach(MinQuality.allCases) { Text($0.title).tag($0.rawValue) }
+                }
+                .pickerStyle(.segmented)
+                Picker("Animated wallpapers play at", selection: $videoQuality) {
+                    ForEach(VideoQuality.allCases) { Text($0.title).tag($0.rawValue) }
+                }
+                Toggle("Limit animation to 30 fps", isOn: $capFrameRate)
+                if engine.optimizing {
+                    HStack { ProgressView().controlSize(.small); Text("Optimizing the current wallpaper…").foregroundStyle(.secondary) }
+                }
+            } header: {
+                SectionHeader("Quality")
+            } footer: {
+                Text("Agents, pasted links and the starter pack only keep files at or above the minimum; your own imports are never filtered. Animated wallpapers play from an optimized copy (hardware HEVC, at most 4K or 1080p and 30 fps) made once and cached, so playback stays light.")
+                    .font(.aura(.caption)).foregroundStyle(.secondary)
             }
 
             Section {

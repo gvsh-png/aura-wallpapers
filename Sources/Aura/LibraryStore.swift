@@ -17,6 +17,10 @@ final class LibraryStore {
     private(set) var installingStarter = false
     /// Duplicates Aura moved to the Trash this session (agent downloads, imports, starter pack).
     private(set) var duplicatesRemoved = 0
+    /// New downloads below the minimum quality that Aura moved to the Trash this session.
+    private(set) var lowQualityRemoved = 0
+    /// Files that skip the quality floor: the user's own imports, and downloads already checked.
+    @ObservationIgnored var exemptFromQuality: Set<String> = []
 
     @ObservationIgnored private var known: Set<String>?
     @ObservationIgnored private var fingerprints: [String: Fingerprint] = [:] // "path#size"
@@ -76,6 +80,11 @@ final class LibraryStore {
                 for other in others where await fingerprint(other).matches(mine) {
                     removeDuplicate(w)
                     return
+                }
+                if !exemptFromQuality.contains(w.id), let size = await Images.pixelSize(w), !MinQuality.current.accepts(size) {
+                    newArrivals.remove(w.id)
+                    lowQualityRemoved += 1
+                    NSWorkspace.shared.recycle([w.url]) { _, _ in Task { @MainActor in self.reload() } }
                 }
             }
         }
@@ -170,7 +179,10 @@ final class LibraryStore {
             }
             guard let kind = Wallpaper.kind(forExtension: url.pathExtension) else { continue }
             let dest = uniqueURL(in: Self.folder(for: kind), base: url.deletingPathExtension().lastPathComponent, ext: url.pathExtension.lowercased())
-            if (try? FileManager.default.copyItem(at: url, to: dest)) != nil { count += 1 }
+            if (try? FileManager.default.copyItem(at: url, to: dest)) != nil {
+                exemptFromQuality.insert(dest.path)
+                count += 1
+            }
         }
         reload()
         return count

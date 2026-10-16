@@ -41,9 +41,13 @@ struct Thumbnail: View {
 /// Muted, looping video used for hover previews and the inspector.
 struct LoopingVideo: NSViewRepresentable {
     let url: URL
+    var gravity: AVLayerVideoGravity = .resizeAspectFill
 
     func makeNSView(context: Context) -> PlayerView { PlayerView(url: url) }
-    func updateNSView(_ view: PlayerView, context: Context) { view.load(url) }
+    func updateNSView(_ view: PlayerView, context: Context) {
+        view.load(url)
+        (view.layer as? AVPlayerLayer)?.videoGravity = gravity
+    }
     static func dismantleNSView(_ view: PlayerView, coordinator: ()) { view.player.pause() }
 
     final class PlayerView: NSView {
@@ -97,29 +101,27 @@ struct Backdrop: View {
     }
 }
 
-/// Large blurred colour blobs orbiting slowly; gives the glass something to catch.
+/// Large blurred colour blobs from the palette. Static: it only animates when the colours change,
+/// so an open window costs nothing per frame.
 struct AuroraLights: View {
     let colors: [Color]
     let animated: Bool
+    private let spots: [UnitPoint] = [.init(x: 0.2, y: 0.25), .init(x: 0.85, y: 0.35), .init(x: 0.45, y: 0.9)]
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: !animated)) { context in
-            let t = context.date.timeIntervalSinceReferenceDate / 9
-            GeometryReader { geo in
-                ZStack {
-                    ForEach(Array(colors.enumerated()), id: \.offset) { i, color in
-                        let phase = t + Double(i) * 2.1
-                        Circle()
-                            .fill(color)
-                            .frame(width: geo.size.width * 0.55, height: geo.size.width * 0.55)
-                            .position(x: geo.size.width * (0.5 + 0.32 * cos(phase * (0.7 + 0.2 * Double(i)))),
-                                      y: geo.size.height * (0.5 + 0.3 * sin(phase * (0.9 - 0.15 * Double(i)))))
-                    }
+        GeometryReader { geo in
+            ZStack {
+                ForEach(Array(colors.prefix(3).enumerated()), id: \.offset) { i, color in
+                    Circle()
+                        .fill(color)
+                        .frame(width: geo.size.width * 0.55, height: geo.size.width * 0.55)
+                        .position(x: geo.size.width * spots[i].x, y: geo.size.height * spots[i].y)
                 }
-                .blur(radius: 90)
             }
+            .blur(radius: 90)
+            .drawingGroup()
         }
-        .animation(.easeInOut(duration: 1.2), value: colors)
+        .animation(animated ? .easeInOut(duration: 1.2) : nil, value: colors)
     }
 }
 

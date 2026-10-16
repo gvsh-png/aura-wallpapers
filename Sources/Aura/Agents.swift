@@ -69,9 +69,11 @@ enum PromptBuilder {
         let type = kind == .live ? "animated (looping video)" : "static"
         let wishes = hints.trimmingCharacters(in: .whitespaces)
         let extra = wishes.isEmpty ? "" : "\nExtra wishes: \(wishes)"
+        let floor = MinQuality.current
+        let minimum = floor == .any ? "the highest resolution available" : "at least \(floor.size) (\(floor.title)); smaller files are rejected automatically"
         let format = kind == .live
-            ? "- MP4 or MOV (H.264 or HEVC), at least 1920×1080, loops cleanly, under 200 MB. Sound does not matter.\n- Good sources: pexels.com/videos, mixkit.co, pixabay.com/videos, coverr.co."
-            : "- JPG or PNG, landscape, at least 2560×1440 (my screen is \(screen)). 4K is better.\n- Good sources: unsplash.com, pexels.com, wallhaven.cc (SFW only), images.nasa.gov."
+            ? "- MP4 or MOV (H.264 or HEVC), \(minimum). Always pick the 4K/2160p download option when a site offers several. Loops cleanly, under 300 MB. Sound does not matter.\n- Good sources: pexels.com/videos, mixkit.co, pixabay.com/videos, coverr.co."
+            : "- JPG or PNG, landscape, \(minimum). My screen is \(screen); 4K, 5K or larger originals are best. Always take the original/full-size file, never a preview.\n- Good sources: unsplash.com, pexels.com, wallhaven.cc (SFW only), images.nasa.gov."
 
         let header = """
         I use Aura, a Mac wallpaper app. Find \(count) high-quality \(type) desktop wallpapers matching: \(what).\(extra)
@@ -125,7 +127,8 @@ enum AgentDocs {
     Aura groups wallpapers into collections by the text before ` - `. Keep titles short and readable.
 
     ## Quality bar
-    - Landscape. Static at least 2560×1440, 4K preferred. Animated at least 1920×1080, under 200 MB, clean loop.
+    - Landscape, 4K (3840×2160) or larger for both static and animated unless the user asks otherwise. Always take the original/2160p download. Aura moves files below the user's quality setting to the Trash.
+    - Animated: clean loop, under 300 MB.
     - Fits the request and works as a desktop background: calm areas for icons, no text overlays.
     - No NSFW, no watermarks, no low-res upscales, nothing behind logins or paywalls. Prefer free-license sources.
 
@@ -187,6 +190,12 @@ enum Downloader {
         let name = LibraryStore.sanitize(title ?? String(source.deletingPathExtension().lastPathComponent.prefix(40)))
         let dest = library.uniqueURL(in: LibraryStore.folder(for: kind), base: "\(collection) - \(name)", ext: ext.lowercased())
         try FileManager.default.moveItem(at: tmp, to: dest)
+        let floor = MinQuality.current
+        if let wallpaper = Wallpaper(url: dest), let pixels = await Images.pixelSize(wallpaper), !floor.accepts(pixels) {
+            try? FileManager.default.removeItem(at: dest)
+            throw DownloadError(message: "Only \(Int(pixels.width))×\(Int(pixels.height)), below \(floor.title)")
+        }
+        library.exemptFromQuality.insert(dest.path)
         library.reload()
         return dest
     }

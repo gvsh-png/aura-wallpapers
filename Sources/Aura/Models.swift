@@ -67,6 +67,10 @@ enum Prefs {
     static let rotateSource = "rotateSource"
     // App
     static let showMenuBarIcon = "showMenuBarIcon"
+    // Quality
+    static let minQuality = "minQuality"
+    static let videoQuality = "videoQuality"
+    static let capFrameRate = "capFrameRate"
     static let autoUpdateCheck = "autoUpdateCheck"
 
     static func register() {
@@ -77,6 +81,7 @@ enum Prefs {
             pauseWhenCovered: true, pauseOnBattery: false, pauseInLowPower: true,
             rotateMinutes: 0, rotateSource: RotateSource.all.rawValue,
             showMenuBarIcon: true, autoUpdateCheck: true,
+            minQuality: MinQuality.uhd.rawValue, videoQuality: VideoQuality.auto.rawValue, capFrameRate: true,
         ])
     }
 
@@ -84,6 +89,63 @@ enum Prefs {
     static func double(_ key: String) -> Double { UserDefaults.standard.double(forKey: key) }
     static func int(_ key: String) -> Int { UserDefaults.standard.integer(forKey: key) }
     static func string(_ key: String) -> String { UserDefaults.standard.string(forKey: key) ?? "" }
+}
+
+/// Lowest resolution accepted from agents, pasted links and the starter pack (your own imports are never filtered).
+enum MinQuality: String, CaseIterable, Identifiable {
+    case any, hd = "1080p", qhd = "1440p", uhd = "4k"
+    var id: String { rawValue }
+    var title: String { self == .any ? "Any" : self == .uhd ? "4K" : rawValue }
+    /// 90% of the nominal pixel count, so 3840×2000-style crops still count.
+    var minPixels: Double {
+        switch self {
+        case .any: 0
+        case .hd: 1920 * 1080 * 0.9
+        case .qhd: 2560 * 1440 * 0.9
+        case .uhd: 3840 * 2160 * 0.9
+        }
+    }
+    var size: String {
+        switch self {
+        case .any, .hd: "1920×1080"
+        case .qhd: "2560×1440"
+        case .uhd: "3840×2160"
+        }
+    }
+    func accepts(_ pixels: CGSize) -> Bool { Double(pixels.width * pixels.height) >= minPixels }
+    static var current: MinQuality { MinQuality(rawValue: Prefs.string(Prefs.minQuality)) ?? .uhd }
+}
+
+/// What animated wallpapers play: the file itself or a cached hardware-HEVC copy.
+enum VideoQuality: String, CaseIterable, Identifiable {
+    /// Up to 4K: anything bigger is scaled to 3840×2160.
+    case auto
+    /// The file as downloaded.
+    case original
+    /// 1920×1080, lightest on battery.
+    case hd = "1080p"
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .auto: "Up to 4K"
+        case .original: "Original"
+        case .hd: "1080p (saves battery)"
+        }
+    }
+    static var current: VideoQuality { VideoQuality(rawValue: Prefs.string(Prefs.videoQuality)) ?? .auto }
+}
+
+/// Short label for a resolution: 8K, 5K, 4K, 1440p, 1080p, SD.
+func qualityLabel(_ size: CGSize) -> String {
+    let long = max(size.width, size.height)
+    switch long {
+    case 7600...: return "8K"
+    case 5000...: return "5K"
+    case 3800...: return "4K"
+    case 2500...: return "1440p"
+    case 1900...: return "1080p"
+    default: return "SD"
+    }
 }
 
 enum Scaling: String, CaseIterable, Identifiable {

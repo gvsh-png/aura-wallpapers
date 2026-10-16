@@ -178,7 +178,7 @@ struct NowPlaying: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(current.title).font(.aura(.callout, .semibold)).lineLimit(1)
-                    Text(current.kind == .live ? (engine.pauseReason ?? "Live") : "On desktop")
+                    Text(current.kind == .live ? (engine.optimizing ? "Optimizing…" : engine.pauseReason ?? "Live") : "On desktop")
                         .font(.aura(.caption)).foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 0)

@@ -15,6 +15,15 @@ struct LibraryView: View {
             VStack(alignment: .leading, spacing: 18) {
                 header
                 if !library.newArrivals.isEmpty { arrivals }
+                if library.lowQualityRemoved > 0 {
+                    Label("Skipped \(library.lowQualityRemoved) download\(library.lowQualityRemoved == 1 ? "" : "s") below \(MinQuality.current.title). Change the minimum in Settings → Quality.",
+                          systemImage: "4k.tv")
+                        .font(.aura(.callout))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .glass(cornerRadius: 12, shadow: false)
+                        .transition(.opacity)
+                }
                 if library.duplicatesRemoved > 0 {
                     Label("Skipped \(library.duplicatesRemoved) duplicate\(library.duplicatesRemoved == 1 ? "" : "s"). They're in the Trash if you want them back.",
                           systemImage: "square.on.square.dashed")
@@ -56,6 +65,11 @@ struct LibraryView: View {
         .navigationTitle(title)
         .dropDestination(for: URL.self) { urls, _ in library.importFiles(urls) > 0 }
         .sheet(item: $renaming) { RenameSheet(wallpaper: $0) }
+        .onKeyPress(.space) {
+            guard let w = items.first(where: { selection.contains($0.id) }) else { return .ignored }
+            FullScreenPreview.show(items, start: w)
+            return .handled
+        }
         .onKeyPress(.return) {
             guard let w = items.first(where: { selection.contains($0.id) }) else { return .ignored }
             Task { await engine.apply(w) }
@@ -102,6 +116,7 @@ struct LibraryView: View {
     @ViewBuilder private func menu(for w: Wallpaper) -> some View {
         let targets = selection.contains(w.id) ? items.filter { selection.contains($0.id) } : [w]
         Button("Set as Wallpaper") { Task { await engine.apply(w) } }
+        Button("Preview Full Screen") { FullScreenPreview.show(items, start: w) }
         Button(library.isFavorite(w) ? "Remove from Favorites" : "Add to Favorites") { library.toggleFavorite(w) }
         Divider()
         ShareLink(items: targets.map(\.url)) { Text("Share…") }
@@ -162,9 +177,11 @@ struct WallpaperCard: View {
                 .padding(10)
             }
             .overlay(alignment: .topTrailing) {
-                if favorite {
-                    Image(systemName: "heart.fill").foregroundStyle(.pink).shadow(radius: 3).padding(10)
+                HStack(spacing: 6) {
+                    if favorite { Image(systemName: "heart.fill").foregroundStyle(.pink).shadow(radius: 3) }
+                    QualityTag(wallpaper: wallpaper, onCard: true)
                 }
+                .padding(10)
             }
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             .cardOutline(selected: selected, active: active)

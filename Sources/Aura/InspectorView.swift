@@ -45,6 +45,17 @@ private struct Detail: View {
     @State private var pixels: CGSize?
     @State private var palette: Palette?
     @State private var renaming = false
+    @State private var qualityChoice = "default"
+
+    private var playbackQuality: Binding<String> {
+        Binding {
+            qualityChoice
+        } set: { choice in
+            qualityChoice = choice
+            VideoOptimizer.setQuality(VideoQuality(rawValue: choice), for: wallpaper)
+            engine.qualityChanged(for: wallpaper)
+        }
+    }
 
     var body: some View {
         ScrollView {
@@ -72,6 +83,27 @@ private struct Detail: View {
                 .buttonStyle(.glassProminent)
                 .controlSize(.extraLarge)
 
+                Button { FullScreenPreview.show(library.items, start: wallpaper) } label: {
+                    Label("Preview Full Screen", systemImage: "arrow.up.left.and.arrow.down.right").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
+                .help("Space")
+
+                if wallpaper.kind == .live {
+                    HStack {
+                        Text("Plays at").foregroundStyle(.secondary)
+                        Picker("Plays at", selection: playbackQuality) {
+                            Text("Default (\(VideoQuality.current.title))").tag("default")
+                            ForEach(VideoQuality.allCases) { Text($0.title).tag($0.rawValue) }
+                        }
+                        .labelsHidden()
+                        if engine.optimizing && engine.current?.id == wallpaper.id {
+                            ProgressView().controlSize(.small).help("Making an optimized copy")
+                        }
+                    }
+                    .font(.aura(.callout))
+                }
+
                 HStack(spacing: 8) {
                     iconButton(library.isFavorite(wallpaper) ? "heart.fill" : "heart", "Favorite") { library.toggleFavorite(wallpaper) }
                     ShareLink(item: wallpaper.url) { Image(systemName: "square.and.arrow.up").frame(maxWidth: .infinity) }.buttonStyle(.glass)
@@ -98,7 +130,7 @@ private struct Detail: View {
 
                 Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
                     info("Type", wallpaper.kind.title)
-                    info("Resolution", pixels.map { "\(Int($0.width)) × \(Int($0.height))" } ?? "—")
+                    info("Resolution", pixels.map { "\(Int($0.width)) × \(Int($0.height))  ·  \(qualityLabel($0))" } ?? "—")
                     info("Size", wallpaper.size.fileSize)
                     info("Format", wallpaper.url.pathExtension.uppercased())
                     info("Added", wallpaper.added.formatted(date: .abbreviated, time: .shortened))
@@ -110,6 +142,7 @@ private struct Detail: View {
         .sheet(isPresented: $renaming) { RenameSheet(wallpaper: wallpaper) }
         .task(id: wallpaper.id) {
             pixels = nil; palette = nil
+            qualityChoice = (UserDefaults.standard.dictionary(forKey: "videoQualityOverrides")?[wallpaper.id] as? String) ?? "default"
             pixels = await Images.pixelSize(wallpaper)
             palette = await PaletteExtractor.extract(from: wallpaper)
         }

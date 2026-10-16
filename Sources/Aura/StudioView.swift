@@ -4,6 +4,7 @@ import SwiftUI
 struct StudioView: View {
     @Environment(AgentStudio.self) private var studio
     @Environment(LibraryStore.self) private var library
+    @AppStorage(Prefs.minQuality) private var minQuality = MinQuality.uhd.rawValue
     let showLibrary: () -> Void
 
     private let suggestions = ["Mountains", "Neon city at night", "Deep space", "Minimal dark", "Ocean", "Rainy forest", "Abstract gradients", "Cozy interiors"]
@@ -44,8 +45,15 @@ struct StudioView: View {
                                    selected: studio.kind == kind) { studio.kind = kind }
                         }
                     }
-                    Stepper("How many: \(studio.count)", value: $studio.count, in: 2...20)
+                    HStack(spacing: 18) {
+                        Stepper("How many: \(studio.count)", value: $studio.count, in: 2...20)
+                            .fixedSize()
+                        Picker("Minimum quality", selection: $minQuality) {
+                            ForEach(MinQuality.allCases) { Text($0.title).tag($0.rawValue) }
+                        }
+                        .pickerStyle(.segmented)
                         .fixedSize()
+                    }
                 }
 
                 step(3, "Which agent?") {

@@ -11,6 +11,8 @@ final class WallpaperEngine {
     private(set) var current: Wallpaper?
     private(set) var palette: Palette?
     private(set) var isPlaying = false
+    /// True while an optimized copy of the current animated wallpaper is being made.
+    private(set) var optimizing = false
     var userPaused = false { didSet { refreshPlayback() } }
 
     @ObservationIgnored private var windows: [NSWindow] = []
@@ -23,6 +25,10 @@ final class WallpaperEngine {
     @ObservationIgnored private var stillURL: URL?
     @ObservationIgnored private var appliedScaling: Scaling?
     @ObservationIgnored private var timer: Timer?
+    /// What the player actually opens: an optimized copy, or nil for the original file.
+    @ObservationIgnored private var playURL: URL?
+    @ObservationIgnored private var playbackKey = ""
+    @ObservationIgnored private var lastSettings: LiveSettings?
 
     private init() {
         let center = NotificationCenter.default
@@ -59,6 +65,7 @@ final class WallpaperEngine {
         current = w
         UserDefaults.standard.set(w.url.path, forKey: "currentWallpaper")
         UserDefaults.standard.set(Date.now.timeIntervalSince1970, forKey: "lastRotation")
+        preparePlayback(w)
         rebuild()
         // Animated wallpapers also get their poster frame as the real desktop picture,
         // so Mission Control, new Spaces and the "animation off" state all match.
@@ -78,6 +85,7 @@ final class WallpaperEngine {
               let w = Wallpaper(url: URL(fileURLWithPath: path)) else { return }
         current = w
         appliedScaling = Scaling.current
+        preparePlayback(w)
         rebuild()
         Task {
             stillURL = await Images.stillURL(for: w)
@@ -153,9 +161,64 @@ final class WallpaperEngine {
         if isPlaying != playing { isPlaying = playing }
     }
 
+    /// Re-picks the playback file after the quality for `w` changed.
+    func qualityChanged(for w: Wallpaper) {
+        guard let current, current.id == w.id else { return }
+        preparePlayback(current)
+    }
+
+    /// Uses a cached optimized copy right away if there is one, otherwise plays the original
+    /// and swaps to the optimized copy once it's ready.
+    private func preparePlayback(_ w: Wallpaper) {
+        guard w.kind == .live else { playURL = nil; playbackKey = ""; optimizing = false; return }
+        let quality = VideoOptimizer.quality(for: w)
+        let cap = Prefs.bool(Prefs.capFrameRate)
+        let key = "\(w.id)|\(quality.rawValue)|\(cap)"
+        guard key != playbackKey else { return }
+        playbackKey = key
+        if let hit = VideoOptimizer.cached(w.url, quality: quality, cap30: cap) {
+            playURL = hit
+            optimizing = false
+            rebuild(force: true)
+            return
+        }
+        playURL = nil
+        optimizing = true
+        rebuild(force: true)
+        Task {
+            let url = await VideoOptimizer.playable(w.url, quality: quality, cap30: cap)
+            guard playbackKey == key else { return }
+            optimizing = false
+            if url != w.url {
+                playURL = url
+                rebuild(force: true)
+            }
+        }
+    }
+
     // MARK: - Settings
 
+    /// Everything that changes how the desktop windows play. Other defaults writes are ignored.
+    private struct LiveSettings: Equatable {
+        let animate, sound, pauseCovered, pauseBattery, pauseLowPower, cap: Bool
+        let speed, volume, dim: Double
+        let scaling, quality: String
+
+        static var now: LiveSettings {
+            LiveSettings(animate: Prefs.bool(Prefs.animate), sound: Prefs.bool(Prefs.sound),
+                         pauseCovered: Prefs.bool(Prefs.pauseWhenCovered), pauseBattery: Prefs.bool(Prefs.pauseOnBattery),
+                         pauseLowPower: Prefs.bool(Prefs.pauseInLowPower), cap: Prefs.bool(Prefs.capFrameRate),
+                         speed: Prefs.double(Prefs.speed), volume: Prefs.double(Prefs.volume), dim: Prefs.double(Prefs.dim),
+                         scaling: Prefs.string(Prefs.scaling),
+                         quality: Prefs.string(Prefs.videoQuality) + "\(UserDefaults.standard.dictionary(forKey: "videoQualityOverrides") ?? [:])")
+        }
+    }
+
     private func settingsChanged() {
+        let settings = LiveSettings.now
+        guard settings != lastSettings else { return }
+        lastSettings = settings
+        if let current { preparePlayback(current) }
         rebuild()
         let speed = Float(Prefs.double(Prefs.speed))
         let sound = Prefs.bool(Prefs.sound)
@@ -245,7 +308,7 @@ final class WallpaperEngine {
                 player.defaultRate = Float(Prefs.double(Prefs.speed))
                 player.isMuted = !Prefs.bool(Prefs.sound)
                 player.volume = Float(Prefs.double(Prefs.volume))
-                loopers.append(AVPlayerLooper(player: player, templateItem: AVPlayerItem(url: w.url)))
+                loopers.append(AVPlayerLooper(player: player, templateItem: AVPlayerItem(url: playURL ?? w.url)))
                 let layer = AVPlayerLayer(player: player)
                 layer.frame = bounds
                 layer.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
