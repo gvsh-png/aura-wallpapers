@@ -158,25 +158,25 @@ private struct PreviewContent: View {
     }
 }
 
-/// "4K", "1080p"… for a wallpaper, loaded lazily.
+/// "4K", "1080p"… for a wallpaper, loaded lazily. Always renders (hidden until known) so its loader runs.
 struct QualityTag: View {
     let wallpaper: Wallpaper
     var onCard = false
     @State private var size: CGSize?
 
     var body: some View {
+        let label = size.map(qualityLabel) ?? "4K"
         Group {
-            if let size {
-                let label = qualityLabel(size)
-                if onCard {
-                    Badge(text: label, tint: label == "SD" || label == "1080p" ? .orange.opacity(0.6) : .black.opacity(0.3))
-                } else {
-                    Text(label).font(.aura(.caption, .bold))
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(.white.opacity(0.15), in: Capsule())
-                }
+            if onCard {
+                Badge(text: label, tint: label == "SD" || label == "1080p" ? .orange.opacity(0.6) : .black.opacity(0.3))
+            } else {
+                Text(label).font(.aura(.caption, .bold))
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(.white.opacity(0.15), in: Capsule())
             }
         }
+        .opacity(size == nil ? 0 : 1)
+        .animation(.auraSpring, value: size == nil)
         .task(id: wallpaper.id) { size = await Images.pixelSize(wallpaper) }
     }
 }
