@@ -1,7 +1,9 @@
 #!/bin/sh
-# Open Aura for the person at the screen (the installer itself runs as root).
 uid=$(/usr/bin/stat -f %u /dev/console)
 if [ "$uid" -gt 0 ]; then
+  # Give the app to the person using the Mac so Aura can update itself without a password.
+  /usr/sbin/chown -R "$uid":staff /Applications/Aura.app
+  # Open Aura for them (the installer itself runs as root).
   /bin/launchctl asuser "$uid" /usr/bin/open -a /Applications/Aura.app || true
 fi
 exit 0

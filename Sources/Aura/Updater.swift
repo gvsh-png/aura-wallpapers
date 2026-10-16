@@ -102,18 +102,47 @@ final class Updater {
             Shell.run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", fresh.path])
 
             let target = Bundle.main.bundleURL
-            var trashed: NSURL?
-            try fm.trashItem(at: target, resultingItemURL: &trashed)
-            do {
-                try fm.moveItem(at: fresh, to: target)
-            } catch {
-                if let old = trashed as URL? { try? fm.moveItem(at: old, to: target) } // put the old version back
-                throw error
+            if needsPassword {
+                try Self.installWithAdminRights(fresh, over: target)
+            } else {
+                var trashed: NSURL?
+                try fm.trashItem(at: target, resultingItemURL: &trashed)
+                do {
+                    try fm.moveItem(at: fresh, to: target)
+                } catch {
+                    if let old = trashed as URL? { try? fm.moveItem(at: old, to: target) } // put the old version back
+                    throw error
+                }
             }
             relaunch(target)
         } catch {
             state = .failed(error.localizedDescription)
         }
+    }
+
+    /// True when the app is owned by root (installed with the .pkg before 1.1.9), so replacing it needs an admin password.
+    var needsPassword: Bool {
+        let app = Bundle.main.bundleURL
+        let owner = (try? FileManager.default.attributesOfItem(atPath: app.path)[.ownerAccountID] as? NSNumber)?.uint32Value
+        return owner != getuid() || !FileManager.default.isWritableFile(atPath: app.path)
+    }
+
+    /// Replaces the app through the standard macOS password prompt, then hands it to the user
+    /// so later updates don't ask again.
+    static func installWithAdminRights(_ fresh: URL, over target: URL) throws {
+        func sh(_ path: String) -> String { "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'" }
+        let command = "/bin/rm -rf \(sh(target.path)) && /usr/bin/ditto \(sh(fresh.path)) \(sh(target.path)) && /usr/sbin/chown -R \(getuid()):staff \(sh(target.path))"
+        try runShell(command, admin: true)
+    }
+
+    /// `do shell script`, optionally with administrator privileges. Throws the script's error message.
+    static func runShell(_ command: String, admin: Bool) throws {
+        let escaped = command.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
+        var error: NSDictionary?
+        NSAppleScript(source: "do shell script \"\(escaped)\"\(admin ? " with administrator privileges" : "")")?.executeAndReturnError(&error)
+        guard let error else { return }
+        let code = error[NSAppleScript.errorNumber] as? Int
+        throw DownloadError(message: code == -128 ? "Update cancelled" : (error[NSAppleScript.errorMessage] as? String ?? "Couldn't replace the app"))
     }
 
     /// Waits for this process to exit, then opens the new bundle.
@@ -153,7 +182,8 @@ struct UpdateBanner: View {
                     .symbolEffect(.bounce, options: .repeat(2), value: release.version)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Aura \(release.version) is available").font(.aura(.headline))
-                    Text("You have \(updater.currentVersion). It installs in place and relaunches.").font(.aura(.callout)).foregroundStyle(.secondary)
+                    Text("You have \(updater.currentVersion). It installs in place and relaunches\(updater.needsPassword ? "; macOS asks for your password this once" : "").")
+                        .font(.aura(.callout)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 Button("What's New") { NSWorkspace.shared.open(release.page) }.buttonStyle(.glass)

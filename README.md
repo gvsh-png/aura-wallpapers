@@ -52,7 +52,7 @@ Requires macOS 15 or later on Apple silicon or Intel.
 
 ## Updates
 
-Aura checks this repo's GitHub Releases every 6 hours (Settings → Updates, or right away with **Check Now**). When a newer `vX.Y.Z` release exists, Aura offers to update. It downloads the installer package and unpacks it without running it, so no admin password is needed. Then it checks the bundle ID and code signature, moves the old app to the Trash, puts the new one in its place and relaunches. `Aura --update` does the same from Terminal.
+Aura checks this repo's GitHub Releases every 6 hours (Settings → Updates, or right away with **Check Now**). When a newer `vX.Y.Z` release exists, Aura offers to update. It downloads the installer package and unpacks it without running it, so no admin password is needed. Then it checks the bundle ID and code signature, moves the old app to the Trash, puts the new one in its place and relaunches. `Aura --update` does the same from Terminal. The installer gives the app to the logged-in user, so updates don't need a password. Copies installed with the 1.1.3–1.1.8 installers are owned by root; from 1.1.9 on, Aura asks for your password once to replace them and then takes ownership.
 
 To publish a release:
 
