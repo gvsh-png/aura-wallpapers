@@ -144,6 +144,13 @@ enum Images {
         return CGImageDestinationFinalize(dest)
     }
 
+    static func pixelSizeSync(_ url: URL?) -> CGSize? {
+        guard let url, let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let p = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
+              let w = p[kCGImagePropertyPixelWidth] as? Int, let h = p[kCGImagePropertyPixelHeight] as? Int else { return nil }
+        return CGSize(width: w, height: h)
+    }
+
     static func pixelSize(_ w: Wallpaper) async -> CGSize? {
         switch w.kind {
         case .still:

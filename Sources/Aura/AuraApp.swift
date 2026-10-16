@@ -34,7 +34,7 @@ struct AuraApp: App {
         }
 
         Settings {
-            CustomizeView()
+            SettingsView()
                 .environment(LibraryStore.shared)
                 .environment(WallpaperEngine.shared)
                 .environment(Updater.shared)
@@ -50,6 +50,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MainActor.assumeIsolated {
             let library = LibraryStore.shared
             WallpaperEngine.shared.restore()
+            // 1.1.6: clear out copies that piled up before duplicate checks existed (once).
+            if !UserDefaults.standard.bool(forKey: "dedupedLibrary") {
+                UserDefaults.standard.set(true, forKey: "dedupedLibrary")
+                Task { await library.removeExistingDuplicates() }
+            }
             // 1.1.4: icon tinting became opt-in. Undo tinting left over from older versions.
             if UserDefaults.standard.string(forKey: "lastIconTint") != nil, !Prefs.bool(Prefs.tintIcons) {
                 ThemeManager.resetIcons()
@@ -70,6 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         LoginItem.refresh()
+        Notifier.shared.setUp()
     }
 
     // Clicking the app in Finder or the Dock while it runs in the background brings the window back.

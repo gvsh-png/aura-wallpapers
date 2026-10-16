@@ -2,7 +2,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 enum Destination: Hashable {
-    case all, still, live, favorites, collection(String), studio, theme, customize
+    case all, still, live, favorites, collection(String), studio, theme, settings
 }
 
 struct ContentView: View {
@@ -35,8 +35,15 @@ struct ContentView: View {
             .animation(.auraSpring, value: section)
             .animation(.auraSpring, value: updater.state)
         }
+        .toolbar(removing: .title)
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Text(title).font(.aura(.title3, .semibold)).contentTransition(.opacity)
+            }
+        }
         .tint(tint)
         .font(.aura(.body))
+        .onChange(of: AgentStudio.shared.showRequested) { section = .studio }
         .animation(.easeInOut(duration: 0.8), value: engine.palette)
         .onAppear { NSApp.setActivationPolicy(.regular) }
         .onDisappear { NSApp.setActivationPolicy(.accessory) }
@@ -55,11 +62,11 @@ struct ContentView: View {
             StudioView(showLibrary: { section = .all; selection = library.newArrivals })
         case .theme:
             ThemeView()
-        case .customize:
-            CustomizeView()
+        case .settings:
+            SettingsView()
                 .frame(maxWidth: 760)
                 .frame(maxWidth: .infinity)
-                .navigationTitle("Customize")
+                .navigationTitle("Settings")
         default:
             LibraryView(items: filtered, title: title, selection: $selection)
                 .searchable(text: $search, placement: .toolbar, prompt: "Search wallpapers")
@@ -110,7 +117,7 @@ struct ContentView: View {
         case .collection(let name): name
         case .studio: "Get Wallpapers"
         case .theme: "Theme"
-        case .customize: "Customize"
+        case .settings: "Settings"
         }
     }
 }
@@ -122,29 +129,40 @@ struct Sidebar: View {
 
     var body: some View {
         List(selection: $section) {
-            Section("Library") {
+            Section {
                 row("All Wallpapers", "square.grid.2x2", .all, library.items.count)
                 row("Static", "photo", .still, library.items.filter { $0.kind == .still }.count)
                 row("Animated", "play.rectangle", .live, library.items.filter { $0.kind == .live }.count)
                 row("Favorites", "heart", .favorites, library.favorites.count)
-            }
-            Section("Create") {
+            } header: { SectionHeader("Library") }
+            Section {
                 Label("Get Wallpapers", systemImage: "wand.and.stars").tag(Destination.studio)
                 Label("Theme", systemImage: "paintpalette").tag(Destination.theme)
-                Label("Customize", systemImage: "slider.horizontal.3").tag(Destination.customize)
-            }
-            Section("Collections") {
+                Label("Settings", systemImage: "gearshape").tag(Destination.settings)
+            } header: { SectionHeader("Create") }
+            Section {
                 ForEach(library.collections, id: \.name) { c in
                     row(c.name, "rectangle.stack", .collection(c.name), c.count)
                 }
-            }
+            } header: { SectionHeader("Collections") }
         }
         .listStyle(.sidebar)
+        .font(.aura(.body))
         .safeAreaInset(edge: .bottom) { NowPlaying().padding(10) }
     }
 
     private func row(_ title: String, _ symbol: String, _ tag: Destination, _ count: Int) -> some View {
-        Label(title, systemImage: symbol).badge(count).tag(tag)
+        HStack {
+            Label(title, systemImage: symbol)
+            Spacer()
+            Text("\(count)")
+                .font(.aura(.caption, .medium))
+                .foregroundStyle(.secondary)
+                .contentTransition(.numericText())
+                .padding(.horizontal, 7).padding(.vertical, 2)
+                .background(.quaternary.opacity(0.6), in: Capsule())
+        }
+        .tag(tag)
     }
 }
 

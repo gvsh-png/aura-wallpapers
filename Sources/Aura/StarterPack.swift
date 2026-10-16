@@ -1,6 +1,6 @@
 import Foundation
 
-/// A general-purpose pool of wallpapers. First launch (and Customize → Library → Download Starter Pack)
+/// A general-purpose pool of wallpapers. First launch (and Settings → Library → Download Starter Pack)
 /// fetches a random handful: 1–4 static and 1–4 animated that aren't in the library yet.
 /// Files are fetched from their sources, not bundled: wallhaven.cc (stills) and mixkit.co (Mixkit License videos).
 enum StarterPack {

@@ -14,8 +14,8 @@ struct InspectorView: View {
             } else if selection.count > 1 {
                 multi
             } else {
-                ContentUnavailableView("No Selection", systemImage: "cursorarrow.click.2",
-                                       description: Text("Click a wallpaper to see details.\nDouble-click to set it."))
+                EmptyState(title: "No Selection", symbol: "cursorarrow.click.2",
+                           message: "Click a wallpaper to see details.\nDouble-click to set it.")
             }
         }
         .animation(.auraSpring, value: selection.map(\.id))

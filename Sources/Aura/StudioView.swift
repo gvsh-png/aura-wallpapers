@@ -33,6 +33,7 @@ struct StudioView: View {
                         }
                     }
                     TextField("Extra wishes (optional): warm colors, no people, ultrawide, photography only…", text: $studio.hints)
+                        .font(.aura(.body))
                         .textFieldStyle(.roundedBorder)
                 }
 

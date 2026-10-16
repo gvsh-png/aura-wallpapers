@@ -39,7 +39,7 @@ struct MenuBarMenu: View {
         }
         Button("Open Aura…") { WindowOpener.show() }
             .keyboardShortcut("o")
-        SettingsLink { Text("Customize…") }
+        SettingsLink { Text("Settings…") }
             .keyboardShortcut(",")
         Divider()
         Button("Quit Aura") { NSApp.terminate(nil) }

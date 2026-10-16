@@ -15,12 +15,18 @@ struct LibraryView: View {
             VStack(alignment: .leading, spacing: 18) {
                 header
                 if !library.newArrivals.isEmpty { arrivals }
+                if library.duplicatesRemoved > 0 {
+                    Label("Skipped \(library.duplicatesRemoved) duplicate\(library.duplicatesRemoved == 1 ? "" : "s"). They're in the Trash if you want them back.",
+                          systemImage: "square.on.square.dashed")
+                        .font(.aura(.callout))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 14).padding(.vertical, 10)
+                        .glass(cornerRadius: 12, shadow: false)
+                        .transition(.opacity)
+                }
                 if items.isEmpty {
-                    ContentUnavailableView {
-                        Label("Nothing here yet", systemImage: "photo.on.rectangle.angled")
-                    } description: {
-                        Text("Drop images, videos or a .zip pack here, use Get Wallpapers, or start with the starter pack.")
-                    } actions: {
+                    EmptyState(title: "Nothing here yet", symbol: "photo.on.rectangle.angled",
+                               message: "Drop images, videos or a .zip pack here, use Get Wallpapers, or start with the starter pack.") {
                         Button(library.installingStarter ? "Downloading…" : "Download Starter Pack") { library.installStarterPack() }
                             .buttonStyle(.glassProminent)
                             .disabled(library.installingStarter)
@@ -195,6 +201,7 @@ struct RenameSheet: View {
             }
         }
         .padding(20)
+        .font(.aura(.body))
         .frame(width: 420)
         .onAppear {
             collection = wallpaper.collection == "Unsorted" ? "" : wallpaper.collection

@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Every setting in one place. Shown in the main window (sidebar → Customize) and as the Settings window.
-struct CustomizeView: View {
+/// Every setting in one place. Shown in the main window (sidebar → Settings) and as the Settings window.
+struct SettingsView: View {
     @Environment(LibraryStore.self) private var library
     @Environment(WallpaperEngine.self) private var engine
     @AppStorage(Prefs.animate) private var animate = true
@@ -51,18 +51,18 @@ struct CustomizeView: View {
                         .disabled(engine.current == nil)
                 }
             } header: {
-                Text("Wallpaper")
+                SectionHeader("Wallpaper")
             } footer: {
-                Text("With animation off, animated wallpapers show a still frame. Turning Aura's wallpaper off brings back the desktop picture you had before.").foregroundStyle(.secondary)
+                Text("With animation off, animated wallpapers show a still frame. Turning Aura's wallpaper off brings back the desktop picture you had before.").font(.aura(.caption)).foregroundStyle(.secondary)
             }
 
-            Section("Power") {
+            Section {
                 Toggle("Pause when the desktop is covered", isOn: $pauseWhenCovered)
                 Toggle("Pause on battery power", isOn: $pauseOnBattery)
                 Toggle("Pause in Low Power Mode", isOn: $pauseInLowPower)
-            }
+            } header: { SectionHeader("Power") }
 
-            Section("Rotation") {
+            Section {
                 Picker("Change wallpaper", selection: $rotateMinutes) {
                     Text("Never").tag(0)
                     Text("Every 15 minutes").tag(15)
@@ -75,23 +75,23 @@ struct CustomizeView: View {
                     ForEach(RotateSource.allCases) { Text($0.title).tag($0.rawValue) }
                 }
                 .disabled(rotateMinutes == 0)
-            }
+            } header: { SectionHeader("Rotation") }
 
-            Section("Theme") { ThemeOptions() }
+            Section { ThemeOptions() } header: { SectionHeader("Theme") }
 
             Section {
                 Toggle("Open at login", isOn: $openAtLogin)
                     .onChange(of: openAtLogin) { _, on in LoginItem.setEnabled(on) }
                 Toggle("Show menu bar icon", isOn: $showMenuBarIcon)
             } header: {
-                Text("App")
+                SectionHeader("App")
             } footer: {
-                Text("With the menu bar icon hidden, open Aura from Applications to get back here.").foregroundStyle(.secondary)
+                Text("With the menu bar icon hidden, open Aura from Applications to get back here.").font(.aura(.caption)).foregroundStyle(.secondary)
             }
 
-            Section("Updates") { UpdateSettings() }
+            Section { UpdateSettings() } header: { SectionHeader("Updates") }
 
-            Section("Library") {
+            Section {
                 LabeledContent("Folder", value: "~/Pictures/Wallpapers")
                 HStack {
                     Button("Show in Finder") { NSWorkspace.shared.open(LibraryStore.root) }
@@ -101,10 +101,21 @@ struct CustomizeView: View {
                     Button("Download Starter Pack") { library.installStarterPack() }
                         .disabled(library.installingStarter)
                 }
-            }
+            } header: { SectionHeader("Library") }
         }
         .formStyle(.grouped)
         .scrollContentBackground(.hidden)
+        .font(.aura(.body))
+    }
+}
+
+/// Section title in Geist instead of the system font.
+struct SectionHeader: View {
+    let title: String
+    init(_ title: String) { self.title = title }
+
+    var body: some View {
+        Text(title).font(.aura(.headline)).foregroundStyle(.secondary)
     }
 }
 

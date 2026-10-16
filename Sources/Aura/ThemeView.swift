@@ -19,8 +19,8 @@ struct ThemeView: View {
                     actions(palette)
                 } else {
                     Panel {
-                        ContentUnavailableView("No wallpaper yet", systemImage: "paintpalette",
-                                               description: Text("Set a wallpaper first. Its colors become your theme."))
+                        EmptyState(title: "No wallpaper yet", symbol: "paintpalette",
+                                   message: "Set a wallpaper first. Its colors become your theme.")
                     }
                 }
             }

@@ -88,6 +88,7 @@ final class ACPSession {
     /// Answers a permission request. `nil` means cancelled.
     func respond(_ request: PermissionRequest, optionID: String?) {
         permissions.removeAll { $0.id == request.id }
+        Notifier.shared.clear(request.id)
         let outcome: [String: Any] = optionID.map { ["outcome": "selected", "optionId": $0] } ?? ["outcome": "cancelled"]
         write(["jsonrpc": "2.0", "id": request.rpcID, "result": ["outcome": outcome]])
     }
@@ -97,6 +98,14 @@ final class ACPSession {
         allowAll = true
         respond(request, optionID: Self.allowOption(request)?.id)
         permissions.forEach { respond($0, optionID: Self.allowOption($0)?.id) }
+    }
+
+    func allow(_ request: PermissionRequest) {
+        respond(request, optionID: (request.options.first { $0.kind == "allow_once" } ?? Self.allowOption(request))?.id)
+    }
+
+    func deny(_ request: PermissionRequest) {
+        respond(request, optionID: request.options.first { $0.kind == "reject_once" }?.id ?? request.options.first { $0.kind.hasPrefix("reject") }?.id)
     }
 
     /// Prefers "always" so the agent remembers too, then "once".
@@ -194,6 +203,7 @@ final class ACPSession {
                 write(["jsonrpc": "2.0", "id": id, "result": ["outcome": ["outcome": "selected", "optionId": allow.id]]])
             } else {
                 permissions.append(request)
+                Notifier.shared.permissionNeeded(request, agent: agent?.rawValue ?? "Your agent")
             }
         case (_?, let id?):
             // fs/terminal and anything else we didn't offer.

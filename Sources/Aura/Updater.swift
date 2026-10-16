@@ -177,7 +177,7 @@ struct UpdateBanner: View {
     }
 }
 
-/// Updates section for Customize.
+/// Updates section for Settings.
 struct UpdateSettings: View {
     @Environment(Updater.self) private var updater
     @AppStorage(Prefs.autoUpdateCheck) private var autoCheck = true

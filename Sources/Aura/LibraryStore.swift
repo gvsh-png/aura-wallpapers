@@ -15,8 +15,13 @@ final class LibraryStore {
     var newArrivals: Set<String> = []
     private(set) var favorites: Set<String>
     private(set) var installingStarter = false
+    /// Duplicates Aura moved to the Trash this session (agent downloads, imports, starter pack).
+    private(set) var duplicatesRemoved = 0
 
     @ObservationIgnored private var known: Set<String>?
+    @ObservationIgnored private var fingerprints: [String: Fingerprint] = [:] // "path#size"
+    @ObservationIgnored private var settling: [String: Int64] = [:]
+    @ObservationIgnored private var checked: Set<String> = []
     @ObservationIgnored private var timer: Timer?
 
     private init() {
@@ -52,6 +57,61 @@ final class LibraryStore {
         newArrivals.formIntersection(ids)
         known = ids
         if found != items { items = found }
+        checkNewArrivalsForDuplicates()
+    }
+
+    // MARK: - Duplicates
+
+    /// Once a new file stops growing (two polls with the same size), compare it with the rest of the library.
+    private func checkNewArrivalsForDuplicates() {
+        for w in items where newArrivals.contains(w.id) && !checked.contains(w.id) {
+            guard settling[w.id] == w.size else { settling[w.id] = w.size; continue }
+            settling[w.id] = nil
+            checked.insert(w.id)
+            // Compare with everything except other downloads that are still in flight.
+            let unsettled = newArrivals.subtracting(checked)
+            let others = items.filter { $0.id != w.id && $0.kind == w.kind && !unsettled.contains($0.id) }
+            Task {
+                let mine = await fingerprint(w)
+                for other in others where await fingerprint(other).matches(mine) {
+                    removeDuplicate(w)
+                    return
+                }
+            }
+        }
+    }
+
+    /// One pass over the whole library. In each group of copies it keeps the wallpaper on the desktop,
+    /// then a favorite, then the oldest file; the rest go to the Trash.
+    func removeExistingDuplicates() async {
+        var kept: [(Wallpaper, Fingerprint)] = []
+        let current = WallpaperEngine.shared.current?.id
+        let ordered = items.sorted { a, b in
+            let ra = (a.id == current ? 0 : isFavorite(a) ? 1 : 2), rb = (b.id == current ? 0 : isFavorite(b) ? 1 : 2)
+            return ra != rb ? ra < rb : a.added < b.added
+        }
+        for w in ordered {
+            let print = await fingerprint(w)
+            if kept.contains(where: { $0.0.kind == w.kind && $0.1.matches(print) }) {
+                removeDuplicate(w)
+            } else {
+                kept.append((w, print))
+            }
+        }
+    }
+
+    private func removeDuplicate(_ w: Wallpaper) {
+        newArrivals.remove(w.id)
+        duplicatesRemoved += 1
+        NSWorkspace.shared.recycle([w.url]) { _, _ in Task { @MainActor in self.reload() } }
+    }
+
+    private func fingerprint(_ w: Wallpaper) async -> Fingerprint {
+        let key = "\(w.id)#\(w.size)"
+        if let hit = fingerprints[key] { return hit }
+        let made = await Fingerprint.make(w)
+        fingerprints[key] = made
+        return made
     }
 
     func installStarterPack() {

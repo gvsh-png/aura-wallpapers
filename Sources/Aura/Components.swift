@@ -194,3 +194,28 @@ extension View {
         )
     }
 }
+
+/// Empty/placeholder state in Geist (ContentUnavailableView forces the system font).
+struct EmptyState<Actions: View>: View {
+    let title: String
+    let symbol: String
+    let message: String
+    @ViewBuilder var actions: Actions
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: symbol).font(.system(size: 40, weight: .light)).foregroundStyle(.secondary)
+            Text(title).font(.aura(.title2, .bold))
+            Text(message).font(.aura(.body)).foregroundStyle(.secondary).multilineTextAlignment(.center)
+            actions
+        }
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+extension EmptyState where Actions == EmptyView {
+    init(title: String, symbol: String, message: String) {
+        self.init(title: title, symbol: symbol, message: message) { EmptyView() }
+    }
+}

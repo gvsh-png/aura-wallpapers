@@ -92,7 +92,7 @@ enum PromptBuilder {
                curl -L -A "Mozilla/5.0 (Macintosh)" -e "<page url>" -o "\(folder)/\(what) - <short title>.<ext>" "<direct file url>"
             2. Name every file "\(what) - <short title>.<ext>". Aura groups wallpapers into collections by the part before " - ".
             3. Run `file` on each download. Delete anything that is HTML, an error page, or under 100 KB, then find a replacement.
-            4. Never touch files that were already in the folder.
+            4. List the folder first. Skip anything already there, and don't save the same wallpaper twice (even at another size). Never touch existing files.
             5. Finish with a table: file, resolution, source page.
             Full rules live in ~/Pictures/Wallpapers/AGENTS.md.
             """
@@ -102,7 +102,7 @@ enum PromptBuilder {
             ```aura
             https://example.com/full-size-file.\(kind == .live ? "mp4" : "jpg")
             ```
-            Direct links only: each must open the actual \(kind == .live ? ".mp4/.mov" : ".jpg/.png") file, not a gallery or post page. Open each link to check it before you answer. Give \(count + 2) links in case some fail. After the block, list the source page and creator for each.
+            Each link must be a different wallpaper. Direct links only: each must open the actual \(kind == .live ? ".mp4/.mov" : ".jpg/.png") file, not a gallery or post page. Open each link to check it before you answer. Give \(count + 2) links in case some fail. After the block, list the source page and creator for each.
             """
         return header + deliver
     }
@@ -139,6 +139,7 @@ enum AgentDocs {
 
     ## Rules
     - Only add files. Never rename, move or delete existing files unless the user asks.
+    - List the folder first and skip wallpapers that are already here. Don't save the same wallpaper twice, even at another size; Aura moves exact and near-identical copies to the Trash anyway.
     - Do not create other folders or files here.
     - End with a table: file, resolution, source page, creator.
     """
@@ -214,6 +215,8 @@ final class AgentStudio {
     }
     var jobs: [DownloadJob] = []
     var lastCopied: Date?
+    /// Set when a notification asks to bring Get Wallpapers to the front.
+    var showRequested: Date?
     let acp = ACPSession()
 
     /// Sends the prompt straight to the agent over ACP.
