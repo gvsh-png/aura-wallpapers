@@ -16,6 +16,7 @@ else
   swift build -c release
   cp .build/release/Aura "$APP/Contents/MacOS/Aura"
 fi
+
 cp -R Resources/Fonts "$APP/Contents/Resources/Fonts"
 
 # Icon
@@ -44,7 +45,6 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>15.0</string>
   <key>LSApplicationCategoryType</key><string>public.app-category.utilities</string>
   <key>NSHighResolutionCapable</key><true/>
-  <key>NSAppleEventsUsageDescription</key><string>Aura switches Light/Dark mode to match your wallpaper.</string>
 </dict></plist>
 PLIST
 

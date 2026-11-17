@@ -1,209 +1,219 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-enum Destination: Hashable {
-    case all, still, live, favorites, collection(String), studio, theme, settings
-}
+enum Tab: String, CaseIterable { case library = "Library", discover = "Discover" }
 
 struct ContentView: View {
-    @Environment(LibraryStore.self) private var library
-    @Environment(WallpaperEngine.self) private var engine
-    @Environment(Updater.self) private var updater
-    @State private var section: Destination? = .all
-    @State private var selection: Set<String> = []
+    @Environment(Library.self) private var library
+    @AppStorage("tab") private var tab = Tab.library
     @State private var search = ""
-    @State private var showInspector = true
-    @State private var importing = false
-
-    private var tint: Color { engine.palette.map { Color(nsColor: $0.accent) } ?? .accentColor }
+    @State private var editing: Wallpaper?
 
     var body: some View {
-        NavigationSplitView {
-            Sidebar(section: $section)
-                .navigationSplitViewColumnWidth(min: 210, ideal: 230, max: 280)
-        } detail: {
-            // Backdrop goes in .background, not a ZStack sibling: an .ignoresSafeArea() sibling
-            // shifts hit-testing by the toolbar height in windowed mode (buttons clickable above where they draw).
+        VStack(spacing: 0) {
+            header
+            UpdateBanner()
             ZStack {
-                detail
-                    .id(section)
-                    .transition(.asymmetric(insertion: .opacity.combined(with: .scale(scale: 0.99)), removal: .opacity))
+                switch tab {
+                case .library: LibraryGrid(items: filtered, edit: { editing = $0 })
+                case .discover: WallhavenView()
+                }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background { Backdrop() }
-            .safeAreaInset(edge: .top, spacing: 0) { UpdateBanner() }
-            .animation(.auraSpring, value: section)
-            .animation(.auraSpring, value: updater.state)
+            .transition(.opacity)
         }
-        .toolbar(removing: .title)
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Text(title).font(.aura(.title3, .semibold)).contentTransition(.opacity)
-            }
-        }
-        .tint(tint)
-        .font(.aura(.body))
-        .onChange(of: AgentStudio.shared.showRequested) { section = .studio }
-        .animation(.easeInOut(duration: 0.8), value: engine.palette)
-        .onAppear { NSApp.setActivationPolicy(.regular) }
-        .onDisappear { NSApp.setActivationPolicy(.accessory) }
-        .fileImporter(isPresented: $importing, allowedContentTypes: [.image, .movie, .zip], allowsMultipleSelection: true) { result in
-            if case .success(let urls) = result {
-                let granted = urls.filter { $0.startAccessingSecurityScopedResource() }
-                library.importFiles(urls)
-                granted.forEach { $0.stopAccessingSecurityScopedResource() }
-            }
-        }
+        .background { Backdrop(accent: library.palette.color) }
+        .tint(library.palette.color)
+        .foregroundStyle(Matte.text)
+        .font(.sora(13))
+        .preferredColorScheme(.dark)
+        .animation(.easeInOut(duration: 1.2), value: library.palette)
+        .animation(.smooth, value: tab)
+        .sheet(item: $editing) { Editor(wallpaper: $0) }
+        .dropDestination(for: URL.self) { urls, _ in library.importFiles(urls) > 0 }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in library.reload() }
     }
 
-    @ViewBuilder private var detail: some View {
-        switch section ?? .all {
-        case .studio:
-            StudioView(showLibrary: { section = .all; selection = library.newArrivals })
-        case .theme:
-            ThemeView()
-        case .settings:
-            SettingsView()
-                .frame(maxWidth: 760)
-                .frame(maxWidth: .infinity)
-                .navigationTitle("Settings")
-        default:
-            LibraryView(items: filtered, title: title, selection: $selection)
-                .searchable(text: $search, placement: .toolbar, prompt: "Search wallpapers")
-                .inspector(isPresented: $showInspector) {
-                    InspectorView(selection: selected)
-                        .inspectorColumnWidth(min: 300, ideal: 340, max: 420)
-                }
-                .toolbar { libraryToolbar }
-        }
-    }
-
-    @ToolbarContentBuilder private var libraryToolbar: some ToolbarContent {
-        ToolbarItemGroup {
-            Button { importing = true } label: { Label("Import", systemImage: "plus") }
-                .help("Import images, videos or a .zip pack")
-            if engine.isLive {
-                Button { engine.userPaused.toggle() } label: {
-                    Label(engine.userPaused ? "Play" : "Pause", systemImage: engine.userPaused ? "play.fill" : "pause.fill")
-                }
-                .help(engine.userPaused ? "Resume animation" : "Pause animation")
-            }
-            Button { engine.shuffle(from: filtered) } label: { Label("Shuffle", systemImage: "shuffle") }
-                .help("Random wallpaper from this view")
-            Button { showInspector.toggle() } label: { Label("Inspector", systemImage: "sidebar.trailing") }
-        }
-    }
-
-    private var selected: [Wallpaper] { library.items.filter { selection.contains($0.id) } }
-
-    private var filtered: [Wallpaper] {
-        let base: [Wallpaper] = switch section ?? .all {
-        case .still: library.items.filter { $0.kind == .still }
-        case .live: library.items.filter { $0.kind == .live }
-        case .favorites: library.items.filter(library.isFavorite)
-        case .collection(let name): library.items.filter { $0.collection == name }
-        default: library.items
-        }
-        let q = search.trimmingCharacters(in: .whitespaces)
-        return q.isEmpty ? base : base.filter { $0.name.localizedCaseInsensitiveContains(q) }
-    }
-
-    private var title: String {
-        switch section ?? .all {
-        case .all: "All Wallpapers"
-        case .still: "Static"
-        case .live: "Animated"
-        case .favorites: "Favorites"
-        case .collection(let name): name
-        case .studio: "Get Wallpapers"
-        case .theme: "Theme"
-        case .settings: "Settings"
-        }
-    }
-}
-
-struct Sidebar: View {
-    @Environment(LibraryStore.self) private var library
-    @Environment(WallpaperEngine.self) private var engine
-    @Binding var section: Destination?
-
-    var body: some View {
-        List(selection: $section) {
-            Section {
-                row("All Wallpapers", "square.grid.2x2", .all, library.items.count)
-                row("Static", "photo", .still, library.items.filter { $0.kind == .still }.count)
-                row("Animated", "play.rectangle", .live, library.items.filter { $0.kind == .live }.count)
-                row("Favorites", "heart", .favorites, library.favorites.count)
-            } header: { SectionHeader("Library") }
-            Section {
-                Label("Get Wallpapers", systemImage: "wand.and.stars").tag(Destination.studio)
-                Label("Theme", systemImage: "paintpalette").tag(Destination.theme)
-                Label("Settings", systemImage: "gearshape").tag(Destination.settings)
-            } header: { SectionHeader("Create") }
-            Section {
-                ForEach(library.collections, id: \.name) { c in
-                    row(c.name, "rectangle.stack", .collection(c.name), c.count)
-                }
-            } header: { SectionHeader("Collections") }
-        }
-        .listStyle(.sidebar)
-        .font(.aura(.body))
-        .safeAreaInset(edge: .bottom) { NowPlaying().padding(10) }
-    }
-
-    private func row(_ title: String, _ symbol: String, _ tag: Destination, _ count: Int) -> some View {
-        HStack {
-            Label(title, systemImage: symbol)
-            Spacer()
-            Text("\(count)")
-                .font(.aura(.caption, .medium))
-                .foregroundStyle(.secondary)
-                .contentTransition(.numericText())
-                .padding(.horizontal, 7).padding(.vertical, 2)
-                .background(.quaternary.opacity(0.6), in: Capsule())
-        }
-        .tag(tag)
-    }
-}
-
-/// Mini card at the bottom of the sidebar showing what is on the desktop.
-struct NowPlaying: View {
-    @Environment(WallpaperEngine.self) private var engine
-
-    var body: some View {
-        if let current = engine.current {
-            HStack(spacing: 10) {
-                Thumbnail(wallpaper: current, size: 160)
-                    .frame(width: 54, height: 34)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(current.title).font(.aura(.callout, .semibold)).lineLimit(1)
-                    Text(current.kind == .live ? (engine.optimizing ? "Optimizing…" : engine.pauseReason ?? "Live") : "On desktop")
-                        .font(.aura(.caption)).foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 0)
-                if engine.isLive {
-                    Button { engine.userPaused.toggle() } label: {
-                        Image(systemName: engine.userPaused ? "play.fill" : "pause.fill")
-                            .contentTransition(.symbolEffect(.replace))
-                            .frame(width: 28, height: 28)
-                            .glass(cornerRadius: 14, shadow: false)
+    private var header: some View {
+        HStack(spacing: 14) {
+            Text("aura").font(.sora(17, .semibold)).tracking(1.5)
+                .padding(.leading, 72) // traffic lights
+            HStack(spacing: 2) {
+                ForEach(Tab.allCases, id: \.self) { t in
+                    Button { tab = t } label: {
+                        Text(t.rawValue).font(.sora(12.5, .medium))
+                            .padding(.horizontal, 14).frame(height: 28)
+                            .foregroundStyle(tab == t ? Matte.text : Matte.dim)
+                            .background { if tab == t { Capsule().fill(Matte.raised) } }
+                            .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
                 }
-                Button { withAnimation(.auraSpring) { engine.turnOff() } } label: {
-                    Image(systemName: "xmark")
-                        .font(.aura(.caption, .bold))
-                        .frame(width: 28, height: 28)
-                        .glass(cornerRadius: 14, shadow: false)
-                }
-                .buttonStyle(.plain)
-                .help("Turn off Aura's wallpaper and bring back your own")
             }
-            .padding(10)
-            .glass(cornerRadius: 14)
-            .id(current.id)
-            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            .padding(2)
+            .background(Capsule().fill(Matte.surface))
+            .overlay(Capsule().strokeBorder(Matte.line))
+            Spacer()
+            if tab == .library {
+                MatteField(prompt: "Search", text: $search).frame(width: 200)
+                IconButton(symbol: "plus", help: "Add your own images") { importImages() }
+                IconButton(symbol: "shuffle", help: "Random wallpaper") { library.shuffle(filtered) }
+            }
         }
+        .padding(.horizontal, 20)
+        .frame(height: 56)
+    }
+
+    private var filtered: [Wallpaper] {
+        let q = search.trimmingCharacters(in: .whitespaces)
+        return q.isEmpty ? library.items : library.items.filter { $0.name.localizedCaseInsensitiveContains(q) }
+    }
+
+    private func importImages() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [.image]
+        panel.prompt = "Add"
+        if panel.runModal() == .OK { library.importFiles(panel.urls) }
+    }
+}
+
+/// Click a wallpaper to put it on the desktop.
+struct LibraryGrid: View {
+    @Environment(Library.self) private var library
+    let items: [Wallpaper]
+    let edit: (Wallpaper) -> Void
+
+    var body: some View {
+        if items.isEmpty {
+            VStack(spacing: 10) {
+                Image(systemName: "photo.on.rectangle.angled").font(.system(size: 34, weight: .light)).foregroundStyle(Matte.dim)
+                Text("No wallpapers yet").font(.sora(17, .semibold))
+                Text("Find some in Discover, or drop your own images here.").foregroundStyle(Matte.dim)
+            }
+        } else {
+            ScrollView {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 230), spacing: 18)], spacing: 22) {
+                    ForEach(items) { w in Card(wallpaper: w, current: library.current == w.id, edit: { edit(w) }) }
+                }
+                .padding(.horizontal, 20).padding(.vertical, 12)
+            }
+            .scrollIndicators(.never)
+        }
+    }
+}
+
+struct Card: View {
+    @Environment(Library.self) private var library
+    let wallpaper: Wallpaper
+    let current: Bool
+    let edit: () -> Void
+    @State private var hover = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Thumbnail(url: wallpaper.url)
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(current ? AnyShapeStyle(.tint) : AnyShapeStyle(Matte.line), lineWidth: current ? 2 : 1))
+                .overlay(alignment: .topTrailing) {
+                    if hover {
+                        IconButton(symbol: "slider.horizontal.3", help: "Customize", action: edit)
+                            .padding(8).transition(.opacity)
+                    }
+                }
+                .scaleEffect(hover ? 1.015 : 1)
+                .shadow(color: .black.opacity(hover ? 0.5 : 0), radius: 16, y: 8)
+            HStack(spacing: 6) {
+                if current { Circle().fill(.tint).frame(width: 6, height: 6) }
+                Text(wallpaper.title).font(.sora(12.5, .medium)).lineLimit(1)
+                Spacer(minLength: 0)
+                Text(wallpaper.collection).font(.sora(11)).foregroundStyle(Matte.dim).lineLimit(1)
+            }
+            .padding(.horizontal, 2)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { library.setDesktop(wallpaper) }
+        .onHover { hover = $0 }
+        .animation(.smooth, value: hover)
+        .animation(.smooth, value: current)
+        .contextMenu {
+            Button("Set as Wallpaper") { library.setDesktop(wallpaper) }
+            Button("Customize…", action: edit)
+            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([wallpaper.url]) }
+            Divider()
+            Button("Move to Trash", role: .destructive) { library.trash(wallpaper) }
+        }
+    }
+}
+
+/// A 16:10 thumbnail from a local file.
+struct Thumbnail: View {
+    let url: URL
+    @State private var image: NSImage?
+
+    var body: some View {
+        Matte.surface
+            .aspectRatio(16 / 10, contentMode: .fit)
+            .overlay { if let image { Image(nsImage: image).resizable().scaledToFill().transition(.opacity) } }
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .task(id: url) {
+                let loaded = await Thumbs.image(for: url)
+                withAnimation(.easeOut(duration: 0.3)) { image = loaded }
+            }
+    }
+}
+
+struct SettingsView: View {
+    @Environment(Library.self) private var library
+    @Environment(Updater.self) private var updater
+    @AppStorage("autoUpdateCheck") private var autoCheck = true
+
+    var body: some View {
+        Form {
+            Section("Library") {
+                LabeledContent("Folder") {
+                    HStack {
+                        Text(library.folderPath).lineLimit(1).truncationMode(.middle).foregroundStyle(Matte.dim)
+                        Button("Change…") { choose() }
+                        if Library.root != Library.defaultRoot { Button("Reset") { library.changeFolder(to: nil) } }
+                    }
+                }
+            }
+            Section("Updates") {
+                LabeledContent("Version", value: updater.currentVersion)
+                Toggle("Check when Aura opens", isOn: $autoCheck)
+                HStack {
+                    switch updater.state {
+                    case .idle: Text("Not checked yet").foregroundStyle(Matte.dim)
+                    case .checking: Text("Checking…")
+                    case .upToDate: Label("Up to date", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
+                    case .available(let r): Text("Version \(r.version) is available").foregroundStyle(.tint)
+                    case .downloading: Text("Downloading…")
+                    case .installing: Text("Installing…")
+                    case .failed(let why): Label(why, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    }
+                    Spacer()
+                    if updater.busy { ProgressView().controlSize(.small) }
+                    if let release = updater.available {
+                        Button("Install & Relaunch") { Task { await updater.install(release) } }
+                    } else {
+                        Button("Check Now") { Task { await updater.check() } }.disabled(updater.busy)
+                    }
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .font(.sora(13))
+        .tint(library.palette.color)
+        .preferredColorScheme(.dark)
+    }
+
+    private func choose() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.prompt = "Use Folder"
+        panel.directoryURL = Library.root
+        if panel.runModal() == .OK, let url = panel.url { library.changeFolder(to: url) }
     }
 }

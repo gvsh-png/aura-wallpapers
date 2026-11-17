@@ -3,7 +3,7 @@ import SwiftUI
 import Observation
 
 /// Updates from GitHub Releases: finds a newer `vX.Y.Z` tag, takes Aura.app out of its installer
-/// package (or update zip on older releases), swaps the bundle in place (old copy goes to the Trash) and relaunches.
+/// package, swaps the bundle in place (old copy goes to the Trash) and relaunches.
 /// No admin password needed: the package is unpacked, not run.
 @MainActor @Observable
 final class Updater {
@@ -12,7 +12,6 @@ final class Updater {
 
     struct Release: Equatable {
         let version: String
-        let notes: String
         let asset: URL
         let assetName: String
         let page: URL
@@ -23,7 +22,6 @@ final class Updater {
     }
 
     private(set) var state: State = .idle
-    @ObservationIgnored private var timer: Timer?
 
     var currentVersion: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0" }
 
@@ -32,22 +30,17 @@ final class Updater {
         return nil
     }
 
+    var busy: Bool { state == .checking || state == .downloading || state == .installing }
+
     /// The `updateFeed` default overrides the release URL (forks, testing).
     private var feed: URL {
         URL(string: UserDefaults.standard.string(forKey: "updateFeed") ?? "https://api.github.com/repos/\(Self.repo)/releases/latest")!
     }
 
-    private init() {
-        timer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.checkIfDue() }
-        }
-    }
-
-    /// Background check at most every 6 hours, when automatic checks are on.
+    /// Checks on launch, at most every 6 hours, when automatic checks are on. Aura doesn't run in the background.
     func checkIfDue() {
-        guard Prefs.bool(Prefs.autoUpdateCheck), state == .idle || state == .upToDate else { return }
-        let last = UserDefaults.standard.double(forKey: "lastUpdateCheck")
-        guard Date.now.timeIntervalSince1970 - last > 6 * 3600 else { return }
+        guard UserDefaults.standard.bool(forKey: "autoUpdateCheck") else { return }
+        guard Date.now.timeIntervalSince1970 - UserDefaults.standard.double(forKey: "lastUpdateCheck") > 6 * 3600 else { return }
         Task { await check() }
     }
 
@@ -59,19 +52,17 @@ final class Updater {
             let (data, response) = try await URLSession.shared.data(for: request)
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
             guard status == 200 else {
-                throw DownloadError(message: status == 404 ? "No public release found" : "Update server said \(status)")
+                throw Failure(message: status == 404 ? "No public release found" : "Update server said \(status)")
             }
             let gh = try JSONDecoder().decode(GitHubRelease.self, from: data)
             UserDefaults.standard.set(Date.now.timeIntervalSince1970, forKey: "lastUpdateCheck")
             let version = gh.tag_name.hasPrefix("v") ? String(gh.tag_name.dropFirst()) : gh.tag_name
             guard Self.isNewer(version, than: currentVersion),
-                  let asset = gh.assets.first(where: { $0.name.lowercased().hasSuffix(".pkg") })
-                    ?? gh.assets.first(where: { $0.name.lowercased().hasSuffix(".zip") }) else {
+                  let asset = gh.assets.first(where: { $0.name.lowercased().hasSuffix(".pkg") }) else {
                 state = .upToDate
                 return
             }
-            state = .available(Release(version: version, notes: gh.body ?? "", asset: asset.browser_download_url,
-                                       assetName: asset.name, page: gh.html_url))
+            state = .available(Release(version: version, asset: asset.browser_download_url, assetName: asset.name, page: gh.html_url))
         } catch {
             state = .failed(error.localizedDescription)
         }
@@ -86,18 +77,16 @@ final class Updater {
             let work = fm.temporaryDirectory.appending(path: "AuraUpdate-\(UUID().uuidString)")
             try fm.createDirectory(at: work, withIntermediateDirectories: true)
             let unpacked = work.appending(path: "unpacked")
-            let ok = release.assetName.lowercased().hasSuffix(".pkg")
-                ? Shell.run("/usr/sbin/pkgutil", ["--expand-full", download.path, unpacked.path]) == 0
-                : Shell.run("/usr/bin/ditto", ["-x", "-k", download.path, unpacked.path]) == 0
-            guard ok else { throw DownloadError(message: "Couldn't unpack the update") }
-
+            guard Shell.run("/usr/sbin/pkgutil", ["--expand-full", download.path, unpacked.path]) == 0 else {
+                throw Failure(message: "Couldn't unpack the update")
+            }
             let found = fm.enumerator(at: unpacked, includingPropertiesForKeys: nil)?
                 .first { ($0 as? URL)?.lastPathComponent == "Aura.app" } as? URL
             guard let fresh = found, let bundle = Bundle(url: fresh), bundle.bundleIdentifier == Bundle.main.bundleIdentifier else {
-                throw DownloadError(message: "The download isn't Aura")
+                throw Failure(message: "The download isn't Aura")
             }
             guard Shell.run("/usr/bin/codesign", ["--verify", "--deep", fresh.path]) == 0 else {
-                throw DownloadError(message: "The update's signature is broken")
+                throw Failure(message: "The update's signature is broken")
             }
             Shell.run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", fresh.path])
 
@@ -120,7 +109,7 @@ final class Updater {
         }
     }
 
-    /// True when the app is owned by root (installed with the .pkg before 1.1.9), so replacing it needs an admin password.
+    /// True when the app is owned by root (installed with an old .pkg), so replacing it needs an admin password.
     var needsPassword: Bool {
         let app = Bundle.main.bundleURL
         let owner = (try? FileManager.default.attributesOfItem(atPath: app.path)[.ownerAccountID] as? NSNumber)?.uint32Value
@@ -132,17 +121,12 @@ final class Updater {
     static func installWithAdminRights(_ fresh: URL, over target: URL) throws {
         func sh(_ path: String) -> String { "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'" }
         let command = "/bin/rm -rf \(sh(target.path)) && /usr/bin/ditto \(sh(fresh.path)) \(sh(target.path)) && /usr/sbin/chown -R \(getuid()):staff \(sh(target.path))"
-        try runShell(command, admin: true)
-    }
-
-    /// `do shell script`, optionally with administrator privileges. Throws the script's error message.
-    static func runShell(_ command: String, admin: Bool) throws {
         let escaped = command.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
         var error: NSDictionary?
-        NSAppleScript(source: "do shell script \"\(escaped)\"\(admin ? " with administrator privileges" : "")")?.executeAndReturnError(&error)
+        NSAppleScript(source: "do shell script \"\(escaped)\" with administrator privileges")?.executeAndReturnError(&error)
         guard let error else { return }
         let code = error[NSAppleScript.errorNumber] as? Int
-        throw DownloadError(message: code == -128 ? "Update cancelled" : (error[NSAppleScript.errorMessage] as? String ?? "Couldn't replace the app"))
+        throw Failure(message: code == -128 ? "Update cancelled" : (error[NSAppleScript.errorMessage] as? String ?? "Couldn't replace the app"))
     }
 
     /// Waits for this process to exit, then opens the new bundle.
@@ -165,82 +149,36 @@ final class Updater {
             let browser_download_url: URL
         }
         let tag_name: String
-        let body: String?
         let html_url: URL
         let assets: [Asset]
     }
 }
 
-/// Banner shown at the top of the main window when an update is ready.
+/// Slim bar under the header while an update is ready or installing.
 struct UpdateBanner: View {
     @Environment(Updater.self) private var updater
 
     var body: some View {
-        if let release = updater.available {
+        if updater.available != nil || updater.state == .downloading || updater.state == .installing {
             HStack(spacing: 12) {
-                Image(systemName: "arrow.down.circle.fill").font(.title2).foregroundStyle(.tint)
-                    .symbolEffect(.bounce, options: .repeat(2), value: release.version)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Aura \(release.version) is available").font(.aura(.headline))
-                    Text("You have \(updater.currentVersion). It installs in place and relaunches\(updater.needsPassword ? "; macOS asks for your password this once" : "").")
-                        .font(.aura(.callout)).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button("What's New") { NSWorkspace.shared.open(release.page) }.buttonStyle(.glass)
-                Button("Update") { Task { await updater.install(release) } }.buttonStyle(.glassProminent)
-            }
-            .padding(14)
-            .glass(cornerRadius: 16, tint: .accentColor)
-            .padding(.horizontal, 24)
-            .padding(.top, 12)
-            .transition(.move(edge: .top).combined(with: .opacity))
-        } else if updater.state == .downloading || updater.state == .installing {
-            HStack(spacing: 10) {
-                ProgressView().controlSize(.small)
-                Text(updater.state == .downloading ? "Downloading update…" : "Installing… Aura will relaunch.").font(.aura(.callout, .medium))
-            }
-            .padding(12)
-            .glass(cornerRadius: 14)
-            .padding(.top, 12)
-            .transition(.move(edge: .top).combined(with: .opacity))
-        }
-    }
-}
-
-/// Updates section for Settings.
-struct UpdateSettings: View {
-    @Environment(Updater.self) private var updater
-    @AppStorage(Prefs.autoUpdateCheck) private var autoCheck = true
-
-    var body: some View {
-        LabeledContent("Version", value: updater.currentVersion)
-        Toggle("Check for updates automatically", isOn: $autoCheck)
-        HStack {
-            Group {
-                switch updater.state {
-                case .idle: Text("Not checked yet")
-                case .checking: Text("Checking…")
-                case .upToDate: Label("You're up to date", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
-                case .available(let r): Label("Version \(r.version) is available", systemImage: "sparkles").foregroundStyle(.tint)
-                case .downloading: Text("Downloading…")
-                case .installing: Text("Installing…")
-                case .failed(let why): Label(why, systemImage: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                if let release = updater.available {
+                    Circle().fill(.tint).frame(width: 7, height: 7)
+                    Text("Aura \(release.version) is ready").font(.sora(12.5, .semibold))
+                    Text("You have \(updater.currentVersion)").font(.sora(12)).foregroundStyle(Matte.dim)
+                    Spacer()
+                    Button("What's New") { NSWorkspace.shared.open(release.page) }.buttonStyle(.matte)
+                    Button("Update") { Task { await updater.install(release) } }.buttonStyle(.accent)
+                } else {
+                    ProgressView().controlSize(.small)
+                    Text(updater.state == .downloading ? "Downloading update…" : "Installing. Aura will relaunch.").font(.sora(12.5, .medium))
+                    Spacer()
                 }
             }
-            .font(.aura(.callout))
-            .contentTransition(.opacity)
-            Spacer()
-            if updater.state == .checking || updater.state == .downloading || updater.state == .installing {
-                ProgressView().controlSize(.small)
-            }
-            if let release = updater.available {
-                Button("Install & Relaunch") { Task { await updater.install(release) } }.buttonStyle(.glassProminent)
-            } else {
-                Button("Check Now") { Task { await updater.check() } }
-                    .buttonStyle(.glass)
-                    .disabled(updater.state == .checking)
-            }
+            .padding(.horizontal, 14).padding(.vertical, 8)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Matte.surface))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Matte.line))
+            .padding(.horizontal, 20).padding(.bottom, 8)
+            .transition(.move(edge: .top).combined(with: .opacity))
         }
-        .animation(.auraSpring, value: updater.state)
     }
 }
