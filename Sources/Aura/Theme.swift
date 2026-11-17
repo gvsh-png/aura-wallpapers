@@ -1,11 +1,17 @@
 import AppKit
 import SwiftUI
 
-/// Matte black surfaces. Only the accent changes, and it comes from the wallpaper.
-enum Matte {
-    static let bg = Color(red: 0.027, green: 0.027, blue: 0.031)
-    static let surface = Color(red: 0.055, green: 0.055, blue: 0.062)
-    static let raised = Color(red: 0.085, green: 0.085, blue: 0.095)
+/// Matte black surfaces with a faint tint of the wallpaper's color, so the whole app follows it.
+/// Views that read these re-render when the palette changes (Observation tracks the read).
+@MainActor enum Matte {
+    static var bg: Color { tinted(0.027, 0.035) }
+    static var surface: Color { tinted(0.055, 0.05) }
+    static var raised: Color { tinted(0.085, 0.06) }
+
+    private static func tinted(_ v: Double, _ amount: Double) -> Color {
+        let p = Library.shared.palette
+        return Color(red: v + p.r * amount, green: v + p.g * amount, blue: v + p.b * amount)
+    }
     static let line = Color.white.opacity(0.06)
     static let text = Color.white.opacity(0.94)
     static let dim = Color.white.opacity(0.48)
@@ -109,6 +115,7 @@ extension ButtonStyle where Self == MatteButton {
 struct IconButton: View {
     let symbol: String
     let help: String
+    var active = false
     let action: () -> Void
     @State private var hover = false
 
@@ -116,6 +123,8 @@ struct IconButton: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(active ? AnyShapeStyle(.tint) : AnyShapeStyle(Matte.text))
+                .contentTransition(.symbolEffect(.replace))
                 .frame(width: 32, height: 32)
                 .background(Circle().fill(hover ? Matte.raised : Matte.surface))
                 .overlay(Circle().strokeBorder(Matte.line))
@@ -146,5 +155,79 @@ struct MatteField: View {
         .padding(.horizontal, 12).frame(height: 32)
         .background(Capsule().fill(Matte.surface))
         .overlay(Capsule().strokeBorder(Matte.line))
+    }
+}
+
+/// Carries the wallpaper's color into every app: the macOS accent color (nearest of the eight)
+/// and the text highlight color. The user's own values are saved first and put back when turned off.
+@MainActor enum SystemTheme {
+    static let key = "matchSystemTheme"
+    private static let keys = ["AppleAccentColor", "AppleHighlightColor"]
+    private static let snapshotKey = "originalTheme"
+    private static let absent = "__absent__"
+
+    static var enabled: Bool { UserDefaults.standard.bool(forKey: key) }
+
+    static func apply(_ p: Palette) {
+        guard enabled else { return }
+        remember()
+        let c = NSColor(srgbRed: p.r, green: p.g, blue: p.b, alpha: 1)
+        let index = accentIndex(c)
+        if index == 4 {
+            Shell.run("/usr/bin/defaults", ["delete", "-g", "AppleAccentColor"]) // Blue is the default
+        } else {
+            Shell.run("/usr/bin/defaults", ["write", "-g", "AppleAccentColor", "-int", String(index)])
+        }
+        let h = c.blended(withFraction: 0.45, of: .white)?.usingColorSpace(.sRGB) ?? c
+        Shell.run("/usr/bin/defaults", ["write", "-g", "AppleHighlightColor", "-string",
+                                        String(format: "%.6f %.6f %.6f Other", h.redComponent, h.greenComponent, h.blueComponent)])
+        broadcast()
+    }
+
+    /// Puts back exactly what the user had before Aura changed it.
+    static func restore() {
+        var snapshot = UserDefaults.standard.dictionary(forKey: snapshotKey) ?? [:]
+        for key in keys {
+            guard let value = snapshot[key] else { continue }
+            switch value {
+            case let s as String where s != absent: Shell.run("/usr/bin/defaults", ["write", "-g", key, "-string", s])
+            case let n as NSNumber: Shell.run("/usr/bin/defaults", ["write", "-g", key, "-int", String(n.intValue)])
+            default: Shell.run("/usr/bin/defaults", ["delete", "-g", key])
+            }
+            snapshot[key] = nil
+        }
+        UserDefaults.standard.set(snapshot, forKey: snapshotKey)
+        broadcast()
+    }
+
+    private static func remember() {
+        var snapshot = UserDefaults.standard.dictionary(forKey: snapshotKey) ?? [:]
+        guard keys.contains(where: { snapshot[$0] == nil }) else { return }
+        CFPreferencesAppSynchronize(kCFPreferencesAnyApplication)
+        for key in keys where snapshot[key] == nil {
+            snapshot[key] = CFPreferencesCopyAppValue(key as CFString, kCFPreferencesAnyApplication) ?? absent as CFString
+        }
+        UserDefaults.standard.set(snapshot, forKey: snapshotKey)
+    }
+
+    /// Nearest macOS accent: -1 graphite, 0 red, 1 orange, 2 yellow, 3 green, 4 blue, 5 purple, 6 pink.
+    static func accentIndex(_ c: NSColor) -> Int {
+        if c.saturationComponent < 0.15 { return -1 }
+        switch c.hueComponent * 360 {
+        case ..<15: return 0
+        case ..<45: return 1
+        case ..<70: return 2
+        case ..<165: return 3
+        case ..<250: return 4
+        case ..<300: return 5
+        case ..<345: return 6
+        default: return 0
+        }
+    }
+
+    private static func broadcast() {
+        for name in ["AppleColorPreferencesChangedNotification", "AppleAquaColorVariantChanged"] {
+            DistributedNotificationCenter.default().postNotificationName(.init(name), object: nil, userInfo: nil, deliverImmediately: true)
+        }
     }
 }

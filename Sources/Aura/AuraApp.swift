@@ -4,7 +4,7 @@ import SwiftUI
 struct AuraApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
 
-    init() { UserDefaults.standard.register(defaults: ["autoUpdateCheck": true]) }
+    init() { UserDefaults.standard.register(defaults: ["autoUpdateCheck": true, "keepRunning": true, SystemTheme.key: true]) }
 
     var body: some Scene {
         Window("Aura", id: "main") {
@@ -12,6 +12,7 @@ struct AuraApp: App {
                 .environment(Library.shared)
                 .environment(Updater.shared)
                 .frame(minWidth: 820, minHeight: 540)
+                .windowFullScreenBehavior(.disabled) // always a window; the green button only zooms
         }
         .defaultSize(width: 1120, height: 740)
         .windowStyle(.hiddenTitleBar)
@@ -31,17 +32,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Cleanup.runOnce()
         NSWindow.allowsAutomaticWindowTabbing = false
-        // Always a window: no full screen, the green button only zooms.
-        NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main) { note in
-            guard let window = note.object as? NSWindow else { return }
-            window.collectionBehavior.remove(.fullScreenPrimary)
-            window.collectionBehavior.insert(.fullScreenNone)
+        // Thumbnails aren't needed while no window is open.
+        NotificationCenter.default.addObserver(forName: NSWindow.willCloseNotification, object: nil, queue: .main) { _ in
+            MainActor.assumeIsolated { Thumbs.cache.removeAllObjects() }
         }
-        MainActor.assumeIsolated { Updater.shared.checkIfDue() }
+        MainActor.assumeIsolated {
+            Updater.shared.checkIfDue()
+            HotKey.register()
+            _ = Library.shared // starts auto shuffle
+        }
     }
 
-    // macOS keeps the desktop picture on its own, so Aura quits with its window: ⌘W closes, the Dock icon reopens.
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    // macOS keeps the desktop picture on its own, so Aura can quit with its window (⌘W closes, the Dock icon reopens).
+    // It stays running, small, when the ⌃⌥W picker or auto shuffle needs it.
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        MainActor.assumeIsolated { !Library.shared.autoShuffle && !UserDefaults.standard.bool(forKey: "keepRunning") }
+    }
 }
 
 enum Shell {
