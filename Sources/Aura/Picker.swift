@@ -53,11 +53,8 @@ final class Picker {
         isOpen = true
     }
 
-    /// Wraps around at the ends, so there's always something on both sides.
     func select(_ i: Int) {
-        guard !items.isEmpty else { return }
-        let i = (i % items.count + items.count) % items.count
-        guard i != index else { return }
+        guard items.indices.contains(i), i != index else { return }
         index = i
         loadLarge()
         prefetch()
@@ -65,7 +62,8 @@ final class Picker {
 
     /// Warms the thumbnail cache around the selection so fast browsing never shows empty cards.
     private func prefetch() {
-        let urls = [0, 1, -1, 2, -2, 3, -3, 4, -4].map { items[(index + $0 % items.count + items.count) % items.count].url }
+        let around = items.indices.filter { abs($0 - index) <= 6 }.sorted { abs($0 - index) < abs($1 - index) }
+        let urls = around.map { items[$0].url }
         Task { for url in urls { _ = await Thumbs.image(for: url) } }
     }
 
@@ -89,11 +87,11 @@ final class Picker {
         loading?.cancel()
         guard let w = selected else { return }
         loading = Task {
-            try? await Task.sleep(for: .milliseconds(380)) // after the slide settles, so it never lands mid-animation
+            try? await Task.sleep(for: .milliseconds(120))
             guard !Task.isCancelled else { return }
             let url = w.url
             let cg: CGImage? = await withCheckedContinuation { done in
-                Thumbs.queue.async { done.resume(returning: Thumbs.diskThumbnail(url, maxPixel: 1600)) }
+                Thumbs.queue.async { done.resume(returning: Thumbs.diskThumbnail(url, maxPixel: 2200)) }
             }
             guard !Task.isCancelled, let cg else { return }
             large = (w.id, NSImage(cgImage: cg, size: .zero))
@@ -125,82 +123,91 @@ final class PickerPanel: NSPanel {
     override func resignKey() { super.resignKey(); onResign?() } // switching away closes it
 }
 
-/// Minimal coverflow: the chosen card in the middle, neighbors flat enough to recognize,
-/// a title underneath. Nothing else.
 struct PickerView: View {
     @Environment(Picker.self) private var picker
     @Environment(Library.self) private var library
 
     var body: some View {
         GeometryReader { geo in
-            let width = min(geo.size.width * 0.34, geo.size.height * 0.48 * Thumbnail.screenAspect)
+            let cardWidth = min(geo.size.width * 0.5, (geo.size.height * 0.55) * Thumbnail.screenAspect)
             ZStack {
-                Color.black.opacity(0.9)
+                Color.black.opacity(0.86)
+                    .overlay(RadialGradient(colors: [library.palette.color.opacity(0.10), .clear], center: .center, startRadius: 0, endRadius: geo.size.width * 0.6))
                     .ignoresSafeArea()
                     .onTapGesture { picker.close(choose: false) }
 
-                ForEach(visible, id: \.1.id) { d, w in
-                    card(w, offset: d, width: width)
+                ForEach(visible, id: \.1.id) { i, w in
+                    card(w, offset: i - picker.index, width: cardWidth)
                 }
 
-                if let w = picker.selected {
-                    VStack(spacing: 4) {
-                        Text(w.title).font(.sora(20, .semibold)).lineLimit(1).contentTransition(.opacity)
-                        Text(w.collection).font(.sora(12)).foregroundStyle(Matte.dim).lineLimit(1)
-                    }
-                    .offset(y: width / Thumbnail.screenAspect / 2 + 44)
-                }
-
-                VStack {
+                VStack(spacing: 6) {
                     Spacer()
-                    Text("←  →    ↩    esc").font(.sora(11, .medium)).foregroundStyle(.white.opacity(0.28))
-                        .padding(.bottom, 28)
+                    if let w = picker.selected {
+                        Text(w.title).font(.sora(40, .semibold)).lineLimit(1)
+                            .contentTransition(.opacity)
+                        Text("\(w.collection)  ·  \(picker.index + 1) of \(picker.items.count)").font(.sora(14)).foregroundStyle(Matte.dim)
+                    }
+                    Text("←  →  browse      ↩  set      esc  close").font(.sora(12, .medium)).foregroundStyle(Matte.dim.opacity(0.7))
+                        .padding(.top, 22)
                 }
+                .padding(.bottom, max(40, geo.size.height * 0.08))
+
+                HStack {
+                    arrow("chevron.left") { picker.select(picker.index - 1) }
+                    Spacer()
+                    arrow("chevron.right") { picker.select(picker.index + 1) }
+                }
+                .padding(.horizontal, 28)
             }
+            .offset(y: -geo.size.height * 0.04)
         }
         .foregroundStyle(Matte.text)
         .tint(library.palette.color)
-        .animation(.smooth(duration: 0.42), value: picker.index) // eases in and out with no bounce; retargets cleanly on fast key repeats
+        .animation(.spring(response: 0.34, dampingFraction: 0.9), value: picker.index) // snappy, retargets cleanly on fast key repeats
         .preferredColorScheme(.dark)
     }
 
-    /// The selected card and two on each side, as (offset from the middle, wallpaper).
-    /// Wraps around when there are enough wallpapers that no card has to fly across the screen.
+    /// The selected card and up to four on each side.
     private var visible: [(Int, Wallpaper)] {
-        let count = picker.items.count
-        return picker.items.enumerated().compactMap { i, w in
-            var d = i - picker.index
-            if count >= 6 { d = (d % count + count + count / 2) % count - count / 2 }
-            return abs(d) <= 2 ? (d, w) : nil
-        }
+        let lo = max(0, picker.index - 4), hi = min(picker.items.count - 1, picker.index + 4)
+        return lo <= hi ? (lo...hi).map { ($0, picker.items[$0]) } : []
     }
 
     private func card(_ w: Wallpaper, offset d: Int, width: CGFloat) -> some View {
         let side = Double(d.signum()), n = Double(abs(d))
-        let sideScale = 0.74, gap = width * 0.05
-        // Neighbors sit beside the middle card without overlapping it, so each one is fully visible.
-        let x = d == 0 ? 0 : side * (width / 2 + width * sideScale / 2 + gap + (n - 1) * (width * sideScale + gap))
-        let height = width / Thumbnail.screenAspect
+        let x = d == 0 ? 0 : side * (width * 0.56 + (n - 1) * width * 0.17)
         // Screen-shaped like the desktop, filled and cropped, never stretched by the picture's own shape.
-        return Thumbnail(url: w.url, corner: 12)
-            .frame(width: width, height: height)
+        return Thumbnail(url: w.url, corner: 14)
+            .frame(width: width, height: width / Thumbnail.screenAspect)
             .overlay {
                 if let large = picker.large, large.id == w.id {
                     Image(nsImage: large.image).resizable().scaledToFill()
-                        .frame(width: width, height: height)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        .frame(width: width, height: width / Thumbnail.screenAspect)
+                        .clipShape(RoundedRectangle(cornerRadius: 14))
                         .transition(.opacity)
                 }
             }
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(d == 0 ? AnyShapeStyle(.white.opacity(0.85)) : AnyShapeStyle(Matte.line), lineWidth: d == 0 ? 1.5 : 1))
-            .overlay { RoundedRectangle(cornerRadius: 12).fill(.black.opacity(d == 0 ? 0 : 0.15 + 0.2 * (n - 1))) }
-            .compositingGroup() // one flattened layer per card: moving it is just a transform
-            .scaleEffect(d == 0 ? 1 : sideScale)
-            .offset(x: x)
-            .transition(.opacity)
-            .zIndex(-n)
-            .onTapGesture { d == 0 ? picker.close(choose: true) : picker.select(picker.index + d) }
-            .animation(.easeOut(duration: 0.3), value: picker.large?.id)
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(d == 0 ? AnyShapeStyle(.tint) : AnyShapeStyle(Matte.line), lineWidth: d == 0 ? 3 : 1))
+        .overlay { RoundedRectangle(cornerRadius: 14).fill(.black.opacity(d == 0 ? 0 : 0.35 + 0.08 * n)) }
+        .shadow(color: .black.opacity(d == 0 ? 0.7 : 0), radius: 36, y: 18)
+        .rotation3DEffect(.degrees(-side * 38), axis: (x: 0, y: 1, z: 0), perspective: 0.45)
+        .scaleEffect(d == 0 ? 1 : max(0.4, 0.66 - (n - 1) * 0.07))
+        .offset(x: x)
+        .opacity(n > 3 ? 0 : 1)
+        .zIndex(-n)
+        .onTapGesture { d == 0 ? picker.close(choose: true) : picker.select(picker.index + d) }
+        .animation(.easeOut(duration: 0.3), value: picker.large?.id)
+    }
+
+    private func arrow(_ symbol: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 18, weight: .semibold))
+                .frame(width: 56, height: 56)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Matte.surface.opacity(0.9)))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Matte.line))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
