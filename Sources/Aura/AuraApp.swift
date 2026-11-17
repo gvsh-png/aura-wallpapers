@@ -12,7 +12,8 @@ struct AuraApp: App {
                 .environment(Library.shared)
                 .environment(Updater.shared)
                 .frame(minWidth: 820, minHeight: 540)
-                .windowFullScreenBehavior(.disabled) // always a window; the green button only zooms
+                .windowFullScreenBehavior(.disabled) // always a window
+                .background(NoZoomButton())
         }
         .defaultSize(width: 1120, height: 740)
         .windowStyle(.hiddenTitleBar)
@@ -92,4 +93,17 @@ enum Cleanup {
         d.set(folder, forKey: Library.folderKey)
         d.set(true, forKey: "cleanedUp2")
     }
+}
+
+/// Greys out the green window button, so Aura can't go full screen or zoom.
+struct NoZoomButton: NSViewRepresentable {
+    final class Probe: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            window?.standardWindowButton(.zoomButton)?.isEnabled = false
+        }
+    }
+    func makeNSView(context: Context) -> Probe { Probe() }
+    // SwiftUI can rebuild the title bar; keep the button off.
+    func updateNSView(_ view: Probe, context: Context) { view.window?.standardWindowButton(.zoomButton)?.isEnabled = false }
 }
